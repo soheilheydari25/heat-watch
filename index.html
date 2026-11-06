@@ -12,26 +12,32 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#E3E6E4; --panel:#F6F7F5; --ink:#16191B; --ink-2:#4A5256; --ink-3:#7A8388;
-  --line:#C3C9C6; --line-2:#D6DBD8; --focus:#1F5FD1;
-  --lv0:#2F8F5B; --lv0-soft:#CFE2D5; --lv1:#E9B800; --lv2:#D2520E; --lv3:#A8132C;
-  --on-lv1:#16191B; --on-lv2:#FFFFFF; --on-lv3:#FFFFFF;
-  --shade:rgba(22,25,27,.06); --hum:#3B7FB8;
+  /* CMC brand: black and CMC red on clean white panels; heat levels keep their own safety colours */
+  --bg:#F2F2F0; --panel:#FFFFFF; --ink:#111214; --ink-2:#4B4F54; --ink-3:#80858B;
+  --line:#D6D8DA; --line-2:#E7E8E9; --focus:#1F5FD1;
+  --brand:#BC2225; --brand-dark:#97191C; --on-brand:#FFFFFF;
+  --lv0:#2F8F5B; --lv0-soft:#D5E8DB; --lv1:#E9B800; --lv2:#D2520E; --lv3:#8E1022;
+  --on-lv1:#111214; --on-lv2:#FFFFFF; --on-lv3:#FFFFFF;
+  --shade:rgba(17,18,20,.05); --hum:#3B7FB8; --rain:#2F6FB3; --rain-bar:rgba(47,111,179,.35);
   --radius-s:4px; --radius-m:8px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#15181A; --panel:#1E2225; --ink:#ECEFED; --ink-2:#A9B1B5; --ink-3:#7E878C;
-    --line:#363C40; --line-2:#2B3034; --focus:#6EA2FF;
-    --lv0:#4FB07A; --lv0-soft:#23382C; --lv1:#F0C419; --lv2:#E8661E; --lv3:#D23049;
-    --shade:rgba(255,255,255,.05); --hum:#6AA7DA;
+    --bg:#121314; --panel:#1C1D20; --ink:#EDEEEF; --ink-2:#A8ADB2; --ink-3:#7C8187;
+    --line:#34373B; --line-2:#282A2E; --focus:#6EA2FF;
+    --brand:#E0393D; --brand-dark:#BC2225; --on-brand:#FFFFFF;
+    --lv0:#4FB07A; --lv0-soft:#203A2A; --lv1:#F0C419; --lv2:#E8661E; --lv3:#D23049;
+    --shade:rgba(255,255,255,.05); --hum:#6AA7DA; --rain:#6BA6E0; --rain-bar:rgba(107,166,224,.4);
+    color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#15181A; --panel:#1E2225; --ink:#ECEFED; --ink-2:#A9B1B5; --ink-3:#7E878C;
-  --line:#363C40; --line-2:#2B3034; --focus:#6EA2FF;
-  --lv0:#4FB07A; --lv0-soft:#23382C; --lv1:#F0C419; --lv2:#E8661E; --lv3:#D23049;
-  --shade:rgba(255,255,255,.05); --hum:#6AA7DA;
+  --bg:#121314; --panel:#1C1D20; --ink:#EDEEEF; --ink-2:#A8ADB2; --ink-3:#7C8187;
+  --line:#34373B; --line-2:#282A2E; --focus:#6EA2FF;
+  --brand:#E0393D; --brand-dark:#BC2225; --on-brand:#FFFFFF;
+  --lv0:#4FB07A; --lv0-soft:#203A2A; --lv1:#F0C419; --lv2:#E8661E; --lv3:#D23049;
+  --shade:rgba(255,255,255,.05); --hum:#6AA7DA; --rain:#6BA6E0; --rain-bar:rgba(107,166,224,.4);
+  color-scheme:dark;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -40,13 +46,22 @@ button,input,select{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .wrap{max-width:1320px;margin:0 auto;padding:0 16px 40px}
 
+/* Top bar */
+.topbar{background:var(--panel);border-bottom:4px solid var(--brand)}
+.topbar-in{max-width:1320px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px 20px;flex-wrap:wrap}
+.logo-plate{background:#fff;border-radius:var(--radius-s);padding:4px 6px;display:flex;line-height:0}
+.logo{height:64px;width:auto}
+.tb-title{display:flex;flex-direction:column;padding-left:18px;border-left:2px solid var(--line);min-width:0;margin-right:auto}
+.tb-title strong{font:700 1.7rem/1 "Barlow Condensed",sans-serif;letter-spacing:.01em}
+.tb-title span{color:var(--ink-2);font-size:.9rem;margin-top:3px}
+
 /* Status board */
 .board{display:grid;grid-template-columns:10px 1fr;margin:16px 0 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-m);overflow:hidden}
 .board-edge{background:var(--lv0)}
 .board-edge.l1{background:repeating-linear-gradient(135deg,var(--lv1) 0 8px,var(--ink) 8px 12px)}
 .board-edge.l2{background:var(--lv2)} .board-edge.l3{background:var(--lv3)}
 .board-body{padding:16px 20px 14px;display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end;justify-content:space-between}
-.brand{font:700 1rem/1 "Barlow Condensed",sans-serif;letter-spacing:.02em;color:var(--ink-2);margin:0 0 8px}
+.brand{font:600 1.05rem/1.2 "Barlow Condensed",sans-serif;color:var(--ink-2);margin:0 0 8px}
 .brand b{color:var(--ink)}
 .headline{margin:0;font:600 clamp(1.55rem,3.6vw,2.5rem)/1.08 "Barlow Condensed",sans-serif;max-width:30ch}
 .plate{display:inline-block;padding:.05em .38em .08em;border-radius:var(--radius-s);margin-right:.25em;background:var(--lv0);color:#fff}
@@ -58,14 +73,16 @@ button,input,select{font:inherit;color:inherit}
 .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .btn{appearance:none;border:1px solid var(--line);background:var(--panel);border-radius:var(--radius-s);padding:7px 12px;cursor:pointer;font-weight:500;line-height:1.2}
 .btn:hover{border-color:var(--ink-3)}
-.btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.btn.primary{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.btn.primary:hover{background:var(--brand-dark);border-color:var(--brand-dark)}
 .btn[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 
 /* Main grid */
 .main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-m)}
 .panel-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px 0}
-h2{margin:0;font:600 1.25rem/1.2 "Barlow Condensed",sans-serif}
+h2{margin:0;font:700 1.25rem/1.2 "Barlow Condensed",sans-serif;display:flex;align-items:center;gap:8px}
+h2::before{content:"";width:4px;height:1em;background:var(--brand);border-radius:1px}
 h3{margin:0 0 6px;font:600 1.05rem/1.2 "Barlow Condensed",sans-serif}
 .hint{color:var(--ink-3);font-size:.85rem;margin:0}
 
@@ -88,7 +105,7 @@ h3{margin:0 0 6px;font:600 1.05rem/1.2 "Barlow Condensed",sans-serif}
 /* Timeline */
 .timeline{padding:12px 14px 14px;border-top:1px solid var(--line-2)}
 .tl-row{display:flex;align-items:center;gap:12px}
-.play{width:42px;height:42px;flex:none;border-radius:50%;border:0;background:var(--ink);color:var(--panel);cursor:pointer;display:grid;place-items:center}
+.play{width:42px;height:42px;flex:none;border-radius:50%;border:0;background:var(--brand);color:var(--on-brand);cursor:pointer;display:grid;place-items:center}
 .play svg{width:16px;height:16px}
 .tl-time{min-width:0;flex:1}
 .tl-time strong{display:block;font:600 1.35rem/1.1 "Barlow Condensed",sans-serif}
@@ -149,9 +166,10 @@ details[open].panel>summary::after{transform:rotate(-135deg);margin-top:4px}
 .cur-site input:hover,.cur-site input:focus{border-color:var(--line);background:var(--bg)}
 .cur-site small{color:var(--ink-3)}
 .now-box{padding:10px 16px 16px;display:flex;flex-direction:column;gap:12px}
-.readout{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.readout{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .readout div{display:flex;flex-direction:column}
-.readout b{font:600 1.9rem/1 "Barlow Condensed",sans-serif}
+.readout b{font:600 1.75rem/1 "Barlow Condensed",sans-serif;white-space:nowrap}
+.readout b small{font-size:.55em;font-weight:600;margin-left:1px}
 .readout span{color:var(--ink-3);font-size:.82rem}
 .why{margin:0;color:var(--ink-2);font-size:.9rem}
 [hidden]{display:none!important}
@@ -170,6 +188,7 @@ details[open].panel>summary::after{transform:rotate(-135deg);margin-top:4px}
 .chart-key span{display:inline-flex;align-items:center;gap:6px}
 .ln{width:18px;height:0;border-top:2px solid var(--ink);display:inline-block}
 .ln.d{border-top:2px dashed var(--lv2)} .ln.h{border-top:2px solid var(--hum);opacity:.7}
+.bar-sw{width:10px;height:12px;background:var(--rain-bar);border:1px solid var(--rain);display:inline-block}
 .tbl-wrap{overflow-x:auto;padding:8px 0 4px}
 table{border-collapse:collapse;width:100%;min-width:560px;font-size:.9rem}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:top;white-space:nowrap}
@@ -209,6 +228,13 @@ footer a{color:inherit}
   .meta{text-align:left}
   .btns{justify-content:flex-start}
 }
+@media (max-width:620px){
+  .logo{height:44px}
+  .tb-title{padding-left:12px}
+  .tb-title strong{font-size:1.35rem}
+  .tb-title span{display:none}
+  .topbar .btns{width:100%;justify-content:flex-start}
+}
 @media (max-width:520px){
   .board-body{padding:14px 14px 12px}
   .speed label{display:none}
@@ -218,21 +244,27 @@ footer a{color:inherit}
 </style>
 </head>
 <body>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="logo-plate"><img class="logo" src="data:image/png;base64,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" alt="CMC Civil Mining &amp; Construction, 20 years" width="263" height="120"></div>
+    <div class="tb-title"><strong>Heat Watch</strong><span>72-hour heat stress and rain outlook for site supervisors</span></div>
+    <div class="btns">
+      <button class="btn" id="copyBtn" type="button">Copy alert text</button>
+      <button class="btn primary" id="refreshBtn" type="button">Refresh forecast</button>
+    </div>
+  </div>
+</header>
 <div class="wrap">
 
   <section class="board" aria-live="polite">
     <div class="board-edge" id="boardEdge"></div>
     <div class="board-body">
       <div>
-        <p class="brand"><b>Heat Watch</b> &nbsp;72-hour heat stress outlook for <span id="brandSite">your site</span></p>
+        <p class="brand">Next 72 hours at <b id="brandSite">your site</b></p>
         <h1 class="headline" id="headline">Loading the forecast…</h1>
-        <p class="subline" id="subline">Fetching hourly temperature and humidity for your sites.</p>
+        <p class="subline" id="subline">Fetching hourly temperature, humidity and rain for your site.</p>
       </div>
       <div class="board-actions">
-        <div class="btns">
-          <button class="btn" id="copyBtn" type="button">Copy alert text</button>
-          <button class="btn primary" id="refreshBtn" type="button">Refresh forecast</button>
-        </div>
         <div class="meta" id="meta"></div>
       </div>
     </div>
@@ -245,6 +277,7 @@ footer a{color:inherit}
           <button type="button" data-mode="risk" aria-pressed="true">Trigger level</button>
           <button type="button" data-mode="temp" aria-pressed="false">Air temp</button>
           <button type="button" data-mode="feels" aria-pressed="false">Feels like</button>
+          <button type="button" data-mode="rain" aria-pressed="false">Rain</button>
         </div>
         <p class="hint" id="mapHint">Press play to step through the next 72 hours.</p>
       </div>
@@ -326,13 +359,14 @@ footer a{color:inherit}
       <div class="chart-key">
         <span><i class="ln"></i>Air temp</span>
         <span><i class="ln d"></i>Feels like</span>
-        <span><i class="ln h"></i>Humidity (right axis)</span>
+        <span><i class="ln h"></i>Humidity (%)</span>
+        <span><i class="bar-sw"></i>Rain (mm per hour)</span>
       </div>
-      <div class="chart-box"><canvas id="chart" aria-label="Hourly temperature chart for the selected site"></canvas></div>
+      <div class="chart-box"><canvas id="chart" aria-label="Hourly temperature, humidity and rain chart for the site"></canvas></div>
     </section>
 
     <section class="panel" aria-label="Daily outlook">
-      <div class="panel-h"><h2>Daily outlook</h2><span class="hint">Highest air temp and feels like each day</span></div>
+      <div class="panel-h"><h2>Daily outlook</h2><span class="hint">Highest temps, total rain and alert hours each day</span></div>
       <div class="tbl-wrap"><table id="outlook"></table></div>
     </section>
 
@@ -343,7 +377,7 @@ footer a{color:inherit}
   </div>
 
   <footer>
-    <p>Forecast guidance only. Work decisions follow CMC's heat management plan, the project's EBA, and on-site checks such as the <a href="https://onlineservices.oir.qld.gov.au/etools/views/calc/heatStress.xhtml" target="_blank" rel="noopener">WHSQ heat stress calculator</a>. Feels like is calculated with the Bureau of Meteorology apparent temperature formula from air temperature, humidity and wind.</p>
+    <p>Forecast guidance only. Work decisions follow CMC's heat management plan, the project's EBA, and on-site checks such as the <a href="https://onlineservices.oir.qld.gov.au/etools/views/calc/heatStress.xhtml" target="_blank" rel="noopener">WHSQ heat stress calculator</a>. Feels like is calculated with the Bureau of Meteorology apparent temperature formula from air temperature, humidity and wind. Rain is the forecast precipitation in millimetres.</p>
     <p>Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0), using the Bureau of Meteorology ACCESS-G model where available. Address search © OpenStreetMap contributors (Nominatim, Photon). Map tiles © Esri.</p>
   </footer>
 </div>
@@ -368,6 +402,7 @@ const LEVELS = [
   {label:'Stop-work trigger', short:'Stop-work'},
   {label:'Extreme heat', short:'Extreme'}
 ];
+const RAIN_STOPS = [[0.1,[175,212,240]],[1,[95,160,222]],[3,[40,108,190]],[8,[28,58,150]],[15,[96,38,150]]];
 const TEMP_STOPS = [[14,[44,110,180]],[20,[79,170,200]],[25,[140,205,140]],[28,[232,226,100]],[31,[247,196,72]],[34,[245,146,54]],[37,[226,82,46]],[40,[178,28,58]],[44,[110,20,80]]];
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -466,6 +501,14 @@ function tempColor(v){
   }
   return TEMP_STOPS[TEMP_STOPS.length-1][1];
 }
+function rainColor(v){
+  if(v <= RAIN_STOPS[0][0]) return RAIN_STOPS[0][1];
+  for(let i=1;i<RAIN_STOPS.length;i++){ const [b,cb]=RAIN_STOPS[i], [a,ca]=RAIN_STOPS[i-1];
+    if(v <= b){ const f=(v-a)/(b-a); return [0,1,2].map(k=>Math.round(ca[k]+(cb[k]-ca[k])*f)); } }
+  return RAIN_STOPS[RAIN_STOPS.length-1][1];
+}
+const mm = v => (v==null||!isFinite(v)) ? '–' : (v < 0.05 ? '0' : v < 10 ? v.toFixed(1) : String(Math.round(v)));
+const sumP = arr => arr.reduce((s,v)=>s+(v||0),0);
 function hexToRgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
@@ -486,7 +529,7 @@ async function fetchForecast(points){
     const q = new URLSearchParams({
       latitude: points.map(p=>p.lat.toFixed(4)).join(','),
       longitude: points.map(p=>p.lon.toFixed(4)).join(','),
-      hourly: 'temperature_2m,relative_humidity_2m,wind_speed_10m',
+      hourly: 'temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,precipitation_probability',
       wind_speed_unit: 'ms', timezone: TZ, forecast_days: '4'
     });
     if(model) q.set('models', model);
@@ -533,7 +576,8 @@ async function refresh(){
     const N = state.times.length;
     const slice = h => {
       const t = h.temperature_2m.slice(start,start+N), rh = h.relative_humidity_2m.slice(start,start+N), ws = (h.wind_speed_10m||[]).slice(start,start+N);
-      return {t, rh, ws, fl: t.map((v,i)=>feelsLike(v, rh[i], ws[i]))};
+      const p = (h.precipitation||[]).slice(start,start+N), pp = (h.precipitation_probability||[]).slice(start,start+N);
+      return {t, rh, ws, p, pp, fl: t.map((v,i)=>feelsLike(v, rh[i], ws[i]))};
     };
     state.siteData = state.sites.map((s,i)=>slice(arr[i].hourly));
     state.grid = {n:GRID_N, b, cells: arr.slice(state.sites.length).map(l=>slice(l.hourly))};
@@ -645,7 +689,11 @@ function renderOverlay(){
         const i4 = (y*W+x)*4;
         if(!isFinite(t)){ img.data[i4+3]=0; continue; }
         let col, a;
-        if(state.mode === 'risk'){
+        if(state.mode === 'rain'){
+          const pr = bil('p');
+          if(!isFinite(pr) || pr < 0.1){ img.data[i4+3]=0; continue; }
+          col = rainColor(pr); a = 165;
+        } else if(state.mode === 'risk'){
           const lv = rawLevel(t, rh, feelsLike(t,rh,ws)).raw;
           col = lvCol[lv]; a = lv===0 ? 0 : 150;
         } else {
@@ -695,6 +743,11 @@ function renderLegend(){
       <span><i class="sw" style="background:var(--lv1)"></i>Caution</span>
       <span><i class="sw" style="background:var(--lv2)"></i>Stop-work</span>
       <span><i class="sw" style="background:var(--lv3)"></i>Extreme</span></div>`;
+  } else if(state.mode === 'rain'){
+    const grad = RAIN_STOPS.map(([v,c],i)=>`rgb(${c.join(',')}) ${(i/(RAIN_STOPS.length-1)*100).toFixed(1)}%`).join(',');
+    L_.innerHTML = `<div>Rain (mm per hour)</div>
+      <div class="ramp" style="background:linear-gradient(90deg,${grad})"></div>
+      <div class="ticks"><span>0.1</span><span>1</span><span>3</span><span>8</span><span>15+</span></div>`;
   } else {
     const grad = TEMP_STOPS.map(([v,c])=>`rgb(${c.join(',')}) ${((v-14)/(44-14)*100).toFixed(1)}%`).join(',');
     L_.innerHTML = `<div>${state.mode==='feels'?'Feels like':'Air temp'} (°C)</div>
@@ -761,6 +814,7 @@ function renderNowList(){
       <div><b>${r0(d.t[f])}°</b><span>Air temp</span></div>
       <div><b>${r0(d.fl[f])}°</b><span>Feels like</span></div>
       <div><b>${r0(d.rh[f])}%</b><span>Humidity</span></div>
+      <div><b>${mm(d.p[f])}<small>mm</small></b><span>Rain${d.pp[f]!=null?` (${r0(d.pp[f])}%)`:''}</span></div>
     </div>
     <p class="why">${a.why.length ? 'Triggered by: ' + esc(a.why.join(', ')) + '.' : 'Below all trigger levels at this hour.'} Wind ${r0(d.ws[f]==null?null:d.ws[f]*3.6)} km/h.</p>`;
 }
@@ -842,12 +896,12 @@ function renderBoard(){
   if(!ev.length){
     hl.innerHTML = `<span class="plate">Clear</span>No heat triggers in the next 72 hours`;
     const d = state.siteData[0]; const mx = Math.max(...d.t.filter(v=>v!=null));
-    sub.textContent = `Highest forecast air temp is ${r0(mx)}°C${state.rules.workOnly?', checked during work hours':''}. Keep normal hydration and shade controls in place.`;
+    sub.textContent = `Highest forecast air temp is ${r0(mx)}°C${state.rules.workOnly?', checked during work hours':''}. ${mm(sumP(d.p))} mm of rain forecast over 72 hours. Keep normal hydration and shade controls in place.`;
   } else {
     const w = ev[0];
     edge.classList.add('l'+w.peak);
     hl.innerHTML = `<span class="plate l${w.peak}">${LEVELS[w.peak].label}</span>${esc(fmtSpan(state.times[w.start], evFinish(w)))}`;
-    sub.textContent = `Peak ${r0(w.maxT)}°C air, feels like ${r0(w.maxFl)}°C. ${state.events.length} trigger period${state.events.length===1?'':'s'} in the next 72 hours; see the trigger log below.`;
+    sub.textContent = `Peak ${r0(w.maxT)}°C air, feels like ${r0(w.maxFl)}°C. ${state.events.length} trigger period${state.events.length===1?'':'s'} and ${mm(sumP(state.siteData[0].p))} mm of rain in the next 72 hours; see the tables below.`;
   }
   const t = state.updated ? state.updated.toLocaleTimeString('en-AU',{timeZone:TZ,hour:'numeric',minute:'2-digit'}) : '';
   meta.textContent = `Forecast from the ${state.source}. Updated ${t} Brisbane time.`;
@@ -893,7 +947,8 @@ function renderChart(){
     datasets:[
       {label:'Air temp', data:d.t, borderColor:ink, backgroundColor:ink, borderWidth:2.2, pointRadius:0, tension:.3, yAxisID:'y', spanGaps:true},
       {label:'Feels like', data:d.fl.map(v=>v==null?null:Math.round(v*10)/10), borderColor:cssVar('--lv2'), borderDash:[6,4], borderWidth:2, pointRadius:0, tension:.3, yAxisID:'y', spanGaps:true},
-      {label:'Humidity', data:d.rh, borderColor:cssVar('--hum'), borderWidth:1.4, pointRadius:0, tension:.3, yAxisID:'y1', spanGaps:true}
+      {label:'Humidity', data:d.rh, borderColor:cssVar('--hum'), borderWidth:1.4, pointRadius:0, tension:.3, yAxisID:'y1', spanGaps:true},
+      {type:'bar', label:'Rain', data:d.p, backgroundColor:cssVar('--rain-bar'), borderColor:cssVar('--rain'), borderWidth:{top:1,left:0,right:0,bottom:0}, yAxisID:'y2', barPercentage:1, categoryPercentage:.9, order:5}
     ]
   };
   const opts = {
@@ -902,12 +957,14 @@ function renderChart(){
     onClick:(e,els,c)=>{ const x = c.scales.x.getValueForPixel(e.x); if(x!=null) setFrame(Math.round(x)); },
     plugins:{legend:{display:false}, tooltip:{callbacks:{
       title:items=>fmtTime(state.times[items[0].dataIndex]),
-      label:it=>`${it.dataset.label}: ${Math.round(it.parsed.y)}${it.dataset.yAxisID==='y1'?'%':'°C'}`
+      label:it=>it.dataset.yAxisID==='y2' ? `Rain: ${mm(it.parsed.y)} mm${d.pp[it.dataIndex]!=null?` (${r0(d.pp[it.dataIndex])}% chance)`:''}` : `${it.dataset.label}: ${Math.round(it.parsed.y)}${it.dataset.yAxisID==='y1'?'%':'°C'}`
     }}},
     scales:{
-      x:{grid:{color:grid}, ticks:{color:muted, autoSkip:false, maxRotation:0, callback:(v,i)=>{ const p=parseLocal(state.times[i]); return p.h===0 ? `${DOW[p.dow]} ${p.d}` : (p.h%6===0 ? fmtHour(p.h) : ''); }}},
+      x:{grid:{color:grid}, ticks:{color:muted, autoSkip:false, maxRotation:0, callback:function(v,i){ const p=parseLocal(state.times[i]); const narrow=this.chart.width<640;
+        if(p.h===0) return `${DOW[p.dow]} ${p.d}`; if(narrow) return ''; return p.h%6===0 ? fmtHour(p.h) : ''; }}},
       y:{position:'left', suggestedMin:15, suggestedMax:42, grid:{color:grid}, ticks:{color:muted, callback:v=>v+'°'}},
-      y1:{position:'right', min:0, max:100, grid:{display:false}, ticks:{color:muted, callback:v=>v+'%', stepSize:25}}
+      y1:{position:'right', min:0, max:100, grid:{display:false}, ticks:{color:muted, callback:v=>v+'%', stepSize:25}},
+      y2:{position:'right', min:0, suggestedMax:4, grid:{display:false}, ticks:{color:cssVar('--rain'), callback:v=>v+' mm', maxTicksLimit:5}}
     }
   };
   if(chart){ chart.data = data; chart.options = opts; chart.update('none'); }
@@ -920,15 +977,16 @@ function renderOutlook(){
   const d = state.siteData[0], A = state.assess[0];
   if(!state.times.length || !d || !A){ tb.innerHTML = '<tbody><tr><td class="empty">No forecast loaded.</td></tr></tbody>'; return; }
   const dayKeys = [...new Set(state.times.map(t=>t.slice(0,10)))];
-  const head = `<thead><tr><th>Day</th><th class="num">Max air</th><th class="num">Max feels like</th><th class="num">Humidity at max</th><th>Worst level</th><th class="num">Hours on alert</th><th>Alert start</th><th>Alert finish</th></tr></thead>`;
+  const head = `<thead><tr><th>Day</th><th class="num">Max air</th><th class="num">Max feels like</th><th class="num">Humidity at max</th><th class="num">Rain total</th><th>Worst level</th><th class="num">Hours on alert</th><th>Alert start</th><th>Alert finish</th></tr></thead>`;
   const body = dayKeys.map(k=>{
-    let mx=-Infinity, rhAt=null, mf=-Infinity, lv=0, n=0, first=-1, last=-1, alertH=0;
+    let mx=-Infinity, rhAt=null, mf=-Infinity, lv=0, n=0, first=-1, last=-1, alertH=0, rain=0;
     state.times.forEach((t,i)=>{ if(t.slice(0,10)!==k) return; n++;
       if(d.t[i]!=null && d.t[i]>mx){ mx=d.t[i]; rhAt=d.rh[i]; }
       if(d.fl[i]!=null && d.fl[i]>mf) mf=d.fl[i];
+      rain += d.p[i]||0;
       lv=Math.max(lv,A[i].lvl); if(A[i].lvl>=1){ if(first<0) first=i; last=i; alertH++; } });
     const part = n < 24 ? ` <small class="hint">(${n} h of forecast)</small>` : '';
-    return `<tr><td><strong>${fmtDay(k)}</strong>${part}</td><td class="num">${r0(mx)}°C</td><td class="num">${r0(mf)}°C</td><td class="num">${r0(rhAt)}%</td>
+    return `<tr><td><strong>${fmtDay(k)}</strong>${part}</td><td class="num">${r0(mx)}°C</td><td class="num">${r0(mf)}°C</td><td class="num">${r0(rhAt)}%</td><td class="num">${mm(rain)} mm</td>
       <td><span class="badge${lv?' l'+lv:''}">${LEVELS[lv].short}</span></td>
       <td class="num">${first<0?'–':fmtDur(alertH)}</td>
       <td>${first<0?'–':fmtClock(state.times[first])}</td><td>${first<0?'–':fmtClock(addHour(state.times[last]))}</td></tr>`;
@@ -965,6 +1023,7 @@ function alertText(){
   state.events.slice().sort((a,b)=>b.peak-a.peak||a.start-b.start).forEach(e=>{
     lines.push(`${LEVELS[e.peak].label}: ${fmtSpan(state.times[e.start], evFinish(e))} (${fmtDur(e.end-e.start+1)}). Peak ${r0(e.maxT)}°C, feels like ${r0(e.maxFl)}°C. ${e.why.join(', ')}.`);
   });
+  lines.push(`Rain forecast: ${mm(sumP(state.siteData[0].p))} mm over the next 72 hours.`);
   lines.push('Plan early starts, extra rest breaks, shade and water. Confirm on site with the WHSQ heat stress calculator.');
   return lines.join('\n');
 }
