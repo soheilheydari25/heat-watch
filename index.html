@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heat Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#E3E6E4; --panel:#F6F7F5; --ink:#16191B; --ink-2:#4A5256; --ink-3:#7A8388;
+  --line:#C3C9C6; --line-2:#D6DBD8; --focus:#1F5FD1;
+  --lv0:#2F8F5B; --lv0-soft:#CFE2D5; --lv1:#E9B800; --lv2:#D2520E; --lv3:#A8132C;
+  --on-lv1:#16191B; --on-lv2:#FFFFFF; --on-lv3:#FFFFFF;
+  --shade:rgba(22,25,27,.06); --hum:#3B7FB8;
+  --radius-s:4px; --radius-m:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15181A; --panel:#1E2225; --ink:#ECEFED; --ink-2:#A9B1B5; --ink-3:#7E878C;
+    --line:#363C40; --line-2:#2B3034; --focus:#6EA2FF;
+    --lv0:#4FB07A; --lv0-soft:#23382C; --lv1:#F0C419; --lv2:#E8661E; --lv3:#D23049;
+    --shade:rgba(255,255,255,.05); --hum:#6AA7DA;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15181A; --panel:#1E2225; --ink:#ECEFED; --ink-2:#A9B1B5; --ink-3:#7E878C;
+  --line:#363C40; --line-2:#2B3034; --focus:#6EA2FF;
+  --lv0:#4FB07A; --lv0-soft:#23382C; --lv1:#F0C419; --lv2:#E8661E; --lv3:#D23049;
+  --shade:rgba(255,255,255,.05); --hum:#6AA7DA;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.5 "Barlow",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto;padding:0 16px 40px}
+
+/* Status board */
+.board{display:grid;grid-template-columns:10px 1fr;margin:16px 0 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-m);overflow:hidden}
+.board-edge{background:var(--lv0)}
+.board-edge.l1{background:repeating-linear-gradient(135deg,var(--lv1) 0 8px,var(--ink) 8px 12px)}
+.board-edge.l2{background:var(--lv2)} .board-edge.l3{background:var(--lv3)}
+.board-body{padding:16px 20px 14px;display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end;justify-content:space-between}
+.brand{font:700 1rem/1 "Barlow Condensed",sans-serif;letter-spacing:.02em;color:var(--ink-2);margin:0 0 8px}
+.brand b{color:var(--ink)}
+.headline{margin:0;font:600 clamp(1.55rem,3.6vw,2.5rem)/1.08 "Barlow Condensed",sans-serif;max-width:30ch}
+.plate{display:inline-block;padding:.05em .38em .08em;border-radius:var(--radius-s);margin-right:.25em;background:var(--lv0);color:#fff}
+.plate.l1{background:var(--lv1);color:var(--on-lv1)} .plate.l2{background:var(--lv2);color:var(--on-lv2)} .plate.l3{background:var(--lv3);color:var(--on-lv3)}
+.subline{margin:8px 0 0;color:var(--ink-2);max-width:70ch}
+.board-body>div:first-child{flex:1 1 460px;min-width:0}
+.board-actions{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 1 340px}
+.meta{font-size:.85rem;color:var(--ink-3);text-align:right}
+.btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.btn{appearance:none;border:1px solid var(--line);background:var(--panel);border-radius:var(--radius-s);padding:7px 12px;cursor:pointer;font-weight:500;line-height:1.2}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+
+/* Main grid */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-m)}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px 0}
+h2{margin:0;font:600 1.25rem/1.2 "Barlow Condensed",sans-serif}
+h3{margin:0 0 6px;font:600 1.05rem/1.2 "Barlow Condensed",sans-serif}
+.hint{color:var(--ink-3);font-size:.85rem;margin:0}
+
+.map-panel{overflow:hidden}
+.map-tools{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--radius-s);overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 12px;cursor:pointer;font-weight:500}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+.map-wrap{position:relative}
+#map{height:min(62vh,620px);min-height:360px;background:var(--line-2)}
+#map.picking{cursor:crosshair}
+.legend{position:absolute;left:10px;bottom:22px;z-index:500;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-s);padding:8px 10px;font-size:.8rem;max-width:calc(100% - 20px)}
+.legend .ramp{width:220px;max-width:100%;height:10px;border-radius:2px;margin:4px 0 2px}
+.legend .ticks{display:flex;justify-content:space-between;color:var(--ink-2)}
+.legend .chips{display:flex;flex-wrap:wrap;gap:6px 10px}
+.legend .chips span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+
+/* Timeline */
+.timeline{padding:12px 14px 14px;border-top:1px solid var(--line-2)}
+.tl-row{display:flex;align-items:center;gap:12px}
+.play{width:42px;height:42px;flex:none;border-radius:50%;border:0;background:var(--ink);color:var(--panel);cursor:pointer;display:grid;place-items:center}
+.play svg{width:16px;height:16px}
+.tl-time{min-width:0;flex:1}
+.tl-time strong{display:block;font:600 1.35rem/1.1 "Barlow Condensed",sans-serif}
+.tl-time span{color:var(--ink-3);font-size:.85rem}
+.speed{display:flex;gap:6px;align-items:center;color:var(--ink-3);font-size:.85rem}
+.speed select{border:1px solid var(--line);border-radius:var(--radius-s);background:var(--panel);padding:4px 6px}
+.scrub{position:relative;height:40px;margin-top:12px}
+.strip{position:absolute;inset:7px 0;display:flex;border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.strip i{flex:1;background:var(--lv0-soft)}
+.strip i.l1{background:var(--lv1)} .strip i.l2{background:var(--lv2)} .strip i.l3{background:var(--lv3)}
+.strip i.off{opacity:.35}
+.strip i.day{box-shadow:inset 1px 0 0 var(--ink-3)}
+#slider{position:absolute;inset:0;width:100%;height:40px;margin:0;background:transparent;-webkit-appearance:none;appearance:none;cursor:pointer}
+#slider::-webkit-slider-runnable-track{height:40px;background:transparent}
+#slider::-webkit-slider-thumb{-webkit-appearance:none;width:7px;height:40px;background:var(--ink);border:2px solid var(--panel);border-radius:3px}
+#slider::-moz-range-track{height:40px;background:transparent}
+#slider::-moz-range-thumb{width:5px;height:36px;background:var(--ink);border:2px solid var(--panel);border-radius:3px}
+.days{position:relative;height:18px;margin-top:4px;font-size:.78rem;color:var(--ink-2)}
+.days span{position:absolute;top:0;white-space:nowrap;padding-left:3px}
+
+/* Sidebar */
+.side{display:flex;flex-direction:column;gap:14px}
+.now-list{list-style:none;margin:8px 0 0;padding:0 8px 8px}
+.now-list li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 8px;border-radius:var(--radius-s);cursor:pointer}
+.now-list li button:hover{background:var(--shade)}
+.now-list li button:focus-visible{outline:2px solid var(--focus)}
+.now-list li button.sel{background:var(--shade);box-shadow:inset 3px 0 0 var(--ink)}
+.now-list .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.now-list .vals{grid-column:1/-1;color:var(--ink-2);font-size:.85rem}
+.badge{display:inline-block;padding:1px 7px;border-radius:3px;font-size:.78rem;font-weight:600;white-space:nowrap;background:var(--lv0-soft);color:var(--ink)}
+.badge.l1{background:var(--lv1);color:var(--on-lv1)} .badge.l2{background:var(--lv2);color:var(--on-lv2)} .badge.l3{background:var(--lv3);color:var(--on-lv3)}
+
+details.panel>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+details.panel>summary::-webkit-details-marker{display:none}
+details.panel>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink-2);border-bottom:2px solid var(--ink-2);transform:rotate(45deg);margin-top:-4px}
+details[open].panel>summary::after{transform:rotate(-135deg);margin-top:4px}
+.pbody{padding:0 16px 14px}
+.notice{background:var(--shade);border-left:3px solid var(--lv1);padding:8px 10px;font-size:.85rem;margin:0 0 10px;border-radius:0 var(--radius-s) var(--radius-s) 0}
+.site-ed{list-style:none;margin:0 0 10px;padding:0}
+.site-ed li{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:6px 0;border-bottom:1px solid var(--line-2)}
+.site-ed input{border:1px solid transparent;border-radius:var(--radius-s);background:transparent;padding:3px 6px;font-weight:600;min-width:0}
+.site-ed input:hover,.site-ed input:focus{border-color:var(--line);background:var(--bg)}
+.site-ed small{grid-column:1;color:var(--ink-3);padding-left:7px}
+.site-ed .x{grid-row:1/3;grid-column:2;align-self:center;border:0;background:none;cursor:pointer;color:var(--ink-3);font-size:1.2rem;line-height:1;padding:4px 8px;border-radius:var(--radius-s)}
+.site-ed .x:hover{color:var(--lv3);background:var(--shade)}
+.search{position:relative;display:flex;gap:6px}
+.search input{flex:1;min-width:0;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--bg);padding:7px 10px}
+.results{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:900;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-s);list-style:none;padding:4px;max-height:240px;overflow:auto;display:none}
+.results.open{display:block}
+.results button{all:unset;box-sizing:border-box;width:100%;padding:7px 8px;border-radius:3px;cursor:pointer}
+.results button:hover,.results button:focus-visible{background:var(--shade)}
+.results small{color:var(--ink-3)}
+.pick-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.site-box{display:flex;flex-direction:column;gap:10px;padding-top:10px}
+.site-box .notice{margin:0}
+.cur-site{display:flex;flex-direction:column;gap:2px}
+.cur-site input{border:1px solid transparent;border-radius:var(--radius-s);background:transparent;padding:3px 6px;margin-left:-6px;font:600 1.3rem/1.2 "Barlow Condensed",sans-serif;min-width:0}
+.cur-site input:hover,.cur-site input:focus{border-color:var(--line);background:var(--bg)}
+.cur-site small{color:var(--ink-3)}
+.now-box{padding:10px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.readout{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.readout div{display:flex;flex-direction:column}
+.readout b{font:600 1.9rem/1 "Barlow Condensed",sans-serif}
+.readout span{color:var(--ink-3);font-size:.82rem}
+.why{margin:0;color:var(--ink-2);font-size:.9rem}
+[hidden]{display:none!important}
+
+.rules{display:grid;grid-template-columns:1fr auto;gap:8px 10px;align-items:center;font-size:.9rem}
+.rules .lvl{grid-column:1/-1;margin-top:6px}
+.rules input[type=number]{width:72px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--bg);padding:4px 6px;text-align:right}
+.rules label{color:var(--ink-2)}
+.chk{grid-column:1/-1;display:flex;gap:8px;align-items:center;margin-top:6px}
+
+/* Lower sections */
+.lower{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:14px}
+.panel{min-width:0}
+.chart-box{position:relative;height:280px;padding:8px 12px 12px}
+.chart-key{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:var(--ink-2);padding:6px 16px 0}
+.chart-key span{display:inline-flex;align-items:center;gap:6px}
+.ln{width:18px;height:0;border-top:2px solid var(--ink);display:inline-block}
+.ln.d{border-top:2px dashed var(--lv2)} .ln.h{border-top:2px solid var(--hum);opacity:.7}
+.tbl-wrap{overflow-x:auto;padding:8px 0 4px}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:.9rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:top;white-space:nowrap}
+th{font-weight:600;color:var(--ink-2);font-size:.82rem;border-bottom:1px solid var(--line)}
+td.wrap-ok{white-space:normal;min-width:180px}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover{background:var(--shade)}
+.num{text-align:right}
+.cell{display:flex;flex-direction:column;gap:2px}
+.cell b{font:600 1.1rem/1 "Barlow Condensed",sans-serif}
+.cell small{color:var(--ink-3)}
+.empty{padding:16px;color:var(--ink-2)}
+
+footer{margin-top:18px;color:var(--ink-3);font-size:.82rem;max-width:90ch}
+footer a{color:inherit}
+
+/* Map pins */
+.pin-icon{background:none;border:0}
+.pin{position:absolute;transform:translate(-50%,calc(-100% - 6px));display:flex;align-items:stretch;border-radius:var(--radius-s);box-shadow:0 1px 3px rgba(0,0,0,.35);white-space:nowrap;cursor:pointer;font-family:"Barlow",sans-serif}
+.pin::after{content:"";position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);border:6px solid transparent;border-bottom:0;border-top-color:var(--pin-bg)}
+.pin-t{padding:2px 6px;font:700 1rem/1.25 "Barlow Condensed",sans-serif;background:var(--pin-bg);color:var(--pin-fg);border-radius:var(--radius-s) 0 0 var(--radius-s)}
+.pin-n{padding:2px 7px;background:var(--panel);color:var(--ink);font-size:.78rem;font-weight:600;line-height:1.6;border-radius:0 var(--radius-s) var(--radius-s) 0;border:1px solid var(--pin-bg)}
+.pin{--pin-bg:var(--lv0);--pin-fg:#fff}
+.pin.l1{--pin-bg:var(--lv1);--pin-fg:var(--on-lv1)} .pin.l2{--pin-bg:var(--lv2);--pin-fg:#fff} .pin.l3{--pin-bg:var(--lv3);--pin-fg:#fff}
+.pin.sel{outline:2px solid var(--ink);outline-offset:1px}
+.leaflet-container{font-family:"Barlow",sans-serif}
+.osm-tiles{filter:grayscale(.85) contrast(.92) brightness(1.04)}
+#map.zoomed-out .pin:not(.sel):not(:hover) .pin-n{display:none}
+#map.zoomed-out .pin:not(.sel):not(:hover) .pin-t{border-radius:var(--radius-s)}
+
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:8px 14px;border-radius:var(--radius-s);font-size:.9rem;z-index:2000;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+
+@media (max-width:980px){
+  .main{grid-template-columns:minmax(0,1fr)}
+  .board-actions{align-items:flex-start;width:100%}
+  .meta{text-align:left}
+  .btns{justify-content:flex-start}
+}
+@media (max-width:520px){
+  .board-body{padding:14px 14px 12px}
+  .speed label{display:none}
+  .legend .ramp{width:160px}
+}
+@media (prefers-reduced-motion:reduce){ .toast{transition:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section class="board" aria-live="polite">
+    <div class="board-edge" id="boardEdge"></div>
+    <div class="board-body">
+      <div>
+        <p class="brand"><b>Heat Watch</b> &nbsp;72-hour heat stress outlook for <span id="brandSite">your site</span></p>
+        <h1 class="headline" id="headline">Loading the forecast…</h1>
+        <p class="subline" id="subline">Fetching hourly temperature and humidity for your sites.</p>
+      </div>
+      <div class="board-actions">
+        <div class="btns">
+          <button class="btn" id="copyBtn" type="button">Copy alert text</button>
+          <button class="btn primary" id="refreshBtn" type="button">Refresh forecast</button>
+        </div>
+        <div class="meta" id="meta"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="main">
+    <section class="panel map-panel" aria-label="Heat map">
+      <div class="map-tools">
+        <div class="seg" role="group" aria-label="Map layer">
+          <button type="button" data-mode="risk" aria-pressed="true">Trigger level</button>
+          <button type="button" data-mode="temp" aria-pressed="false">Air temp</button>
+          <button type="button" data-mode="feels" aria-pressed="false">Feels like</button>
+        </div>
+        <p class="hint" id="mapHint">Press play to step through the next 72 hours.</p>
+      </div>
+      <div class="map-wrap">
+        <div id="map" role="application" aria-label="Map of sites and forecast heat"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="timeline">
+        <div class="tl-row">
+          <button class="play" id="playBtn" type="button" aria-label="Play time-lapse"></button>
+          <div class="tl-time" aria-live="polite"><strong id="tlTime">–</strong><span id="tlRel">–</span></div>
+          <div class="speed"><label for="speedSel">Speed</label>
+            <select id="speedSel" aria-label="Playback speed">
+              <option value="500">Slow</option><option value="220" selected>Normal</option><option value="90">Fast</option>
+            </select>
+            <button class="btn" id="nowBtn" type="button">Now</button>
+          </div>
+        </div>
+        <div class="scrub">
+          <div class="strip" id="strip" aria-hidden="true"></div>
+          <input type="range" id="slider" min="0" max="71" value="0" step="1" aria-label="Forecast hour">
+        </div>
+        <div class="days" id="days" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel" aria-label="Site address">
+        <div class="panel-h"><h2>Site address</h2></div>
+        <div class="pbody site-box">
+          <p class="notice" id="exampleNote">This is an example address. Search for your site to replace it.</p>
+          <div class="cur-site">
+            <input type="text" id="siteName" aria-label="Site name" maxlength="50">
+            <small id="siteAddr"></small>
+          </div>
+          <div class="search">
+            <input type="search" id="searchIn" placeholder="Street address, suburb or town" aria-label="Search for the site address" autocomplete="off">
+            <ul class="results" id="results"></ul>
+          </div>
+          <div class="pick-row">
+            <button class="btn" type="button" id="pickBtn" aria-pressed="false">Pick on map</button>
+            <span class="hint">Or tap the map where the site is.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Conditions at the selected hour">
+        <div class="panel-h"><h2>At this hour</h2><span class="hint" id="nowHint"></span></div>
+        <div id="nowBox" class="now-box"></div>
+      </section>
+
+      <details class="panel" id="rulesPanel">
+        <summary><h2>Trigger rules</h2></summary>
+        <div class="pbody">
+          <p class="hint" style="margin-bottom:8px">Defaults follow common Queensland construction EBA heat clauses. Change them to match CMC's agreement for each project.</p>
+          <div class="rules">
+            <h3 class="lvl"><span class="badge l1">Caution</span></h3>
+            <label for="rCaution">Feels like at or above (°C)</label><input type="number" id="rCaution" step="0.5">
+            <h3 class="lvl"><span class="badge l2">Stop-work trigger</span></h3>
+            <label for="rStop">Air temp at or above (°C)</label><input type="number" id="rStop" step="0.5">
+            <label for="rHumAir">Or air temp at or above (°C)</label><input type="number" id="rHumAir" step="0.5">
+            <label for="rHumRh">with humidity at or above (%)</label><input type="number" id="rHumRh" step="1">
+            <h3 class="lvl"><span class="badge l3">Extreme</span></h3>
+            <label for="rExt">Air temp at or above (°C)</label><input type="number" id="rExt" step="0.5">
+            <h3 class="lvl">Work hours</h3>
+            <label for="rWs">Shift starts (hour, 0–23)</label><input type="number" id="rWs" min="0" max="23" step="1">
+            <label for="rWe">Shift ends (hour, 1–24)</label><input type="number" id="rWe" min="1" max="24" step="1">
+            <label class="chk"><input type="checkbox" id="rWork"> Only count triggers during work hours</label>
+          </div>
+          <div style="margin-top:12px"><button class="btn" type="button" id="resetRules">Restore defaults</button></div>
+        </div>
+      </details>
+    </aside>
+  </div>
+
+  <div class="lower">
+    <section class="panel" aria-label="Hourly chart">
+      <div class="panel-h"><h2 id="chartTitle">Hourly forecast</h2><span class="hint">Shaded hours are outside the shift</span></div>
+      <div class="chart-key">
+        <span><i class="ln"></i>Air temp</span>
+        <span><i class="ln d"></i>Feels like</span>
+        <span><i class="ln h"></i>Humidity (right axis)</span>
+      </div>
+      <div class="chart-box"><canvas id="chart" aria-label="Hourly temperature chart for the selected site"></canvas></div>
+    </section>
+
+    <section class="panel" aria-label="Daily outlook">
+      <div class="panel-h"><h2>Daily outlook</h2><span class="hint">Highest air temp and feels like each day</span></div>
+      <div class="tbl-wrap"><table id="outlook"></table></div>
+    </section>
+
+    <section class="panel" aria-label="Trigger log">
+      <div class="panel-h"><h2>Trigger log</h2><span class="hint">Select a row to jump to it on the map</span></div>
+      <div class="tbl-wrap"><table id="events"></table></div>
+    </section>
+  </div>
+
+  <footer>
+    <p>Forecast guidance only. Work decisions follow CMC's heat management plan, the project's EBA, and on-site checks such as the <a href="https://onlineservices.oir.qld.gov.au/etools/views/calc/heatStress.xhtml" target="_blank" rel="noopener">WHSQ heat stress calculator</a>. Feels like is calculated with the Bureau of Meteorology apparent temperature formula from air temperature, humidity and wind.</p>
+    <p>Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0), using the Bureau of Meteorology ACCESS-G model where available. Address search © OpenStreetMap contributors (Nominatim, Photon). Map tiles © Esri.</p>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- Config ---------- */
+const TZ = 'Australia/Brisbane';
+const HOURS = 72;
+const GRID_N = 8;
+const LS_KEY = 'heatwatch.v3';
+const DEFAULT_RULES = {caution:32, stop:35, humidAir:29, humidRh:75, extreme:40, workStart:6, workEnd:18, workOnly:true};
+const DEFAULT_SITES = [
+  {id:'def1', name:'Marlborough', addr:'Marlborough, Queensland, Australia', lat:-22.8135, lon:149.8895}
+];
+const LEVELS = [
+  {label:'No trigger', short:'Normal'},
+  {label:'Caution', short:'Caution'},
+  {label:'Stop-work trigger', short:'Stop-work'},
+  {label:'Extreme heat', short:'Extreme'}
+];
+const TEMP_STOPS = [[14,[44,110,180]],[20,[79,170,200]],[25,[140,205,140]],[28,[232,226,100]],[31,[247,196,72]],[34,[245,146,54]],[37,[226,82,46]],[40,[178,28,58]],[44,[110,20,80]]];
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/* ---------- State ---------- */
+const state = {
+  sites: DEFAULT_SITES.map(s=>({...s})),
+  rules: {...DEFAULT_RULES},
+  mode: 'risk',
+  frame: 0,
+  selected: null,
+  times: [],
+  siteData: [],   // per site: {t:[],rh:[],ws:[],fl:[]}
+  grid: null,     // {n, b:{s,n,w,e}, cells:[{t,rh,ws}] row-major, north row first}
+  assess: [],     // per site per hour: {lvl, raw, why}
+  events: [],
+  source: '',
+  updated: null,
+  loading: false,
+  error: null,
+  picking: false
+};
+
+/* ---------- Storage ---------- */
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    if(s){
+      if(s.site && isFinite(s.site.lat) && isFinite(s.site.lon)) state.sites = [s.site];
+      if(s.rules) state.rules = {...DEFAULT_RULES, ...s.rules};
+      if(s.mode) state.mode = s.mode;
+    }
+  }catch(e){}
+}
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({site:state.sites[0]||null, rules:state.rules, mode:state.mode})); }catch(e){}
+}
+
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r0 = v => (v==null||!isFinite(v)) ? '–' : Math.round(v);
+const uid = () => 's' + Math.random().toString(36).slice(2,9);
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function parseLocal(s){
+  const [d,t] = s.split('T'); const [y,m,da] = d.split('-').map(Number);
+  return {y, m, d:da, h:Number(t.slice(0,2)), dow:new Date(Date.UTC(y,m-1,da)).getUTCDay(), dayKey:d};
+}
+function fmtHour(h){ return h===0?'12 am':h<12?h+' am':h===12?'12 pm':(h-12)+' pm'; }
+function fmtTime(s){ const p=parseLocal(s); return `${DOW[p.dow]} ${p.d} ${MON[p.m-1]}, ${fmtHour(p.h)}`; }
+function fmtClock(s){ return fmtHour(parseLocal(s).h); }
+function addHour(s){ const p=parseLocal(s); const d=new Date(Date.UTC(p.y,p.m-1,p.d,p.h+1)); const z=n=>String(n).padStart(2,'0');
+  return `${d.getUTCFullYear()}-${z(d.getUTCMonth()+1)}-${z(d.getUTCDate())}T${z(d.getUTCHours())}:00`; }
+function evFinish(e){ return addHour(state.times[e.end]); }
+function fmtDur(h){ return h===1 ? '1 hour' : `${h} hours`; }
+function fmtSpan(a,b){ const pa=parseLocal(a), pb=parseLocal(b); return pa.dayKey===pb.dayKey ? `${fmtTime(a)} to ${fmtClock(b)}` : `${fmtTime(a)} to ${fmtTime(b)}`; }
+function fmtDay(key){ const p=parseLocal(key+'T00:00'); return `${DOW[p.dow]} ${p.d} ${MON[p.m-1]}`; }
+function nowLocalKey(){
+  const f = new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'});
+  const o = {}; f.formatToParts(new Date()).forEach(p=>o[p.type]=p.value);
+  const hh = o.hour === '24' ? '00' : o.hour;
+  return `${o.year}-${o.month}-${o.day}T${hh}:00`;
+}
+
+/* BOM apparent temperature (feels like). ws in m/s */
+function feelsLike(t, rh, ws){
+  if(t==null||rh==null||!isFinite(t)||!isFinite(rh)) return null;
+  const e = (rh/100) * 6.105 * Math.exp(17.27*t/(237.7+t));
+  return t + 0.33*e - 0.70*(ws||0) - 4.00;
+}
+
+function inShift(h){
+  const R = state.rules;
+  if(R.workStart <= R.workEnd) return h >= R.workStart && h < R.workEnd;
+  return h >= R.workStart || h < R.workEnd;
+}
+
+/* Returns raw level (weather only) plus reasons */
+function rawLevel(t, rh, fl){
+  if(t==null) return {raw:0, why:[]};
+  const R = state.rules; let lvl = 0; const why = [];
+  if(fl!=null && fl >= R.caution){ lvl = Math.max(lvl,1); why.push(`Feels like ${R.caution}°C+`); }
+  if(rh!=null && t >= R.humidAir && rh >= R.humidRh){ lvl = Math.max(lvl,2); why.push(`${R.humidAir}°C+ with ${R.humidRh}%+ humidity`); }
+  if(t >= R.stop){ lvl = Math.max(lvl,2); why.push(`Air ${R.stop}°C+`); }
+  if(t >= R.extreme){ lvl = 3; why.push(`Air ${R.extreme}°C+`); }
+  return {raw:lvl, why};
+}
+
+function tempColor(v){
+  if(v==null||!isFinite(v)) return null;
+  if(v <= TEMP_STOPS[0][0]) return TEMP_STOPS[0][1];
+  for(let i=1;i<TEMP_STOPS.length;i++){
+    const [b, cb] = TEMP_STOPS[i], [a, ca] = TEMP_STOPS[i-1];
+    if(v <= b){ const f=(v-a)/(b-a); return [0,1,2].map(k=>Math.round(ca[k]+(cb[k]-ca[k])*f)); }
+  }
+  return TEMP_STOPS[TEMP_STOPS.length-1][1];
+}
+function hexToRgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------- Data ---------- */
+function gridBounds(){
+  const la = state.sites.map(s=>s.lat), lo = state.sites.map(s=>s.lon);
+  let s=Math.min(...la), n=Math.max(...la), w=Math.min(...lo), e=Math.max(...lo);
+  const pLa = Math.max(0.35,(n-s)*0.25), pLo = Math.max(0.35,(e-w)*0.25);
+  s-=pLa; n+=pLa; w-=pLo; e+=pLo;
+  if(n-s < 1.4){ const c=(n+s)/2; s=c-0.7; n=c+0.7; }
+  if(e-w < 1.4){ const c=(e+w)/2; w=c-0.7; e=c+0.7; }
+  return {s,n,w,e};
+}
+
+async function fetchForecast(points){
+  const build = model => {
+    const q = new URLSearchParams({
+      latitude: points.map(p=>p.lat.toFixed(4)).join(','),
+      longitude: points.map(p=>p.lon.toFixed(4)).join(','),
+      hourly: 'temperature_2m,relative_humidity_2m,wind_speed_10m',
+      wind_speed_unit: 'ms', timezone: TZ, forecast_days: '4'
+    });
+    if(model) q.set('models', model);
+    return 'https://api.open-meteo.com/v1/forecast?' + q.toString();
+  };
+  const attempts = [['bom_access_global','BOM ACCESS-G model'], [null,'Open-Meteo best-match models (BOM ACCESS-G unavailable)']];
+  let lastErr = null;
+  for(const [model,label] of attempts){
+    try{
+      let res;
+      try{ res = await fetch(build(model)); }
+      catch(netErr){ const er = new Error('blocked'); er.kind = 'network'; throw er; }
+      let j = {}; try{ j = await res.json(); }catch(_){}
+      if(!res.ok || j.error){ const er = new Error(j.reason || ('the weather service answered with error ' + res.status)); er.kind = res.status===403 ? 'forbidden' : 'http'; throw er; }
+      const arr = Array.isArray(j) ? j : [j];
+      const ok = arr.length === points.length && arr.every(l => l.hourly && Array.isArray(l.hourly.temperature_2m)
+        && l.hourly.temperature_2m.slice(0,96).filter(v=>v!=null).length > 60
+        && l.hourly.relative_humidity_2m && l.hourly.relative_humidity_2m.slice(0,96).filter(v=>v!=null).length > 60);
+      if(!ok) throw new Error('Incomplete data from '+(model||'default')+' model');
+      return {arr, label};
+    }catch(e){ lastErr = e; if(e.kind==='network' || e.kind==='forbidden') break; }
+  }
+  throw lastErr;
+}
+
+async function refresh(){
+  if(state.loading){ state.pending = true; return; }
+  state.pending = false;
+  if(!state.sites.length){ state.loading=false; state.error=null; state.times=[]; renderAll(); return; }
+  state.loading = true; state.error = null;
+  $('refreshBtn').disabled = true; $('refreshBtn').textContent = 'Refreshing…';
+  try{
+    const b = gridBounds();
+    const gridPts = [];
+    for(let r=0;r<GRID_N;r++) for(let c=0;c<GRID_N;c++)
+      gridPts.push({lat: b.n - r*(b.n-b.s)/(GRID_N-1), lon: b.w + c*(b.e-b.w)/(GRID_N-1)});
+    const pts = state.sites.map(s=>({lat:s.lat, lon:s.lon})).concat(gridPts);
+    const {arr, label} = await fetchForecast(pts);
+
+    const times = arr[0].hourly.time;
+    const nowKey = nowLocalKey();
+    let start = times.findIndex(t => t >= nowKey); if(start < 0) start = 0;
+    state.times = times.slice(start, start+HOURS);
+    const N = state.times.length;
+    const slice = h => {
+      const t = h.temperature_2m.slice(start,start+N), rh = h.relative_humidity_2m.slice(start,start+N), ws = (h.wind_speed_10m||[]).slice(start,start+N);
+      return {t, rh, ws, fl: t.map((v,i)=>feelsLike(v, rh[i], ws[i]))};
+    };
+    state.siteData = state.sites.map((s,i)=>slice(arr[i].hourly));
+    state.grid = {n:GRID_N, b, cells: arr.slice(state.sites.length).map(l=>slice(l.hourly))};
+    state.source = label;
+    state.updated = new Date();
+    state.frame = 0;
+    if(!state.selected || !state.sites.some(s=>s.id===state.selected)) state.selected = state.sites[0].id;
+    overlayCache.clear();
+    fitMap();
+  }catch(e){
+    state.error = e;
+  }finally{
+    state.loading = false;
+    $('refreshBtn').disabled = false; $('refreshBtn').textContent = 'Refresh forecast';
+    renderAll();
+    if(state.pending) refresh();
+  }
+}
+
+/* ---------- Assessment ---------- */
+function computeAssessments(){
+  const N = state.times.length;
+  const hrs = state.times.map(t=>parseLocal(t).h);
+  state.assess = state.siteData.map(d => {
+    const out = [];
+    for(let i=0;i<N;i++){
+      const a = rawLevel(d.t[i], d.rh[i], d.fl[i]);
+      const counted = !state.rules.workOnly || inShift(hrs[i]);
+      out.push({raw:a.raw, lvl: counted ? a.raw : 0, why:a.why, off: !inShift(hrs[i])});
+    }
+    return out;
+  });
+  // events
+  const ev = [];
+  state.sites.forEach((s,si)=>{
+    if(!state.assess[si]) return;
+    let cur = null; const A = state.assess[si], D = state.siteData[si];
+    const close = () => { if(cur){ cur.why=[...cur.why]; ev.push(cur); cur=null; } };
+    for(let i=0;i<N;i++){
+      const a = A[i];
+      if(a.lvl >= 1){
+        if(!cur) cur = {si, start:i, end:i, peak:0, why:new Set(), maxT:-Infinity, maxFl:-Infinity, rhAtPeak:null, stopHrs:0};
+        cur.end = i; cur.peak = Math.max(cur.peak, a.lvl);
+        a.why.forEach(w=>cur.why.add(w));
+        if(a.lvl>=2) cur.stopHrs++;
+        if(D.t[i] > cur.maxT){ cur.maxT = D.t[i]; cur.rhAtPeak = D.rh[i]; }
+        if(D.fl[i]!=null && D.fl[i] > cur.maxFl) cur.maxFl = D.fl[i];
+      } else close();
+    }
+    close();
+  });
+  ev.sort((a,b)=> a.start-b.start || b.peak-a.peak);
+  state.events = ev;
+}
+
+/* ---------- Map ---------- */
+let map, tiles, overlay, markers = {};
+const overlayCache = new Map();
+const darkQ = window.matchMedia('(prefers-color-scheme: dark)');
+function isDark(){ const t=document.documentElement.getAttribute('data-theme'); return t ? t==='dark' : darkQ.matches; }
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+function tileUrl(){ return ESRI + (isDark() ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base') + '/MapServer/tile/{z}/{y}/{x}'; }
+function labelUrl(){ return ESRI + (isDark() ? 'World_Dark_Gray_Reference' : 'World_Light_Gray_Reference') + '/MapServer/tile/{z}/{y}/{x}'; }
+let labels = null, tileErrors = 0, usingOsm = false;
+
+function initMap(){
+  map = L.map('map', {zoomControl:true, scrollWheelZoom:true}).setView([-27.5,153.0], 8);
+  tiles = L.tileLayer(tileUrl(), {maxZoom:16, attribution:'Tiles © Esri, HERE, Garmin, OpenStreetMap contributors'}).addTo(map);
+  labels = L.tileLayer(labelUrl(), {maxZoom:16, pane:'shadowPane'});
+  tiles.on('tileerror', ()=>{
+    if(usingOsm || ++tileErrors < 4) return;
+    usingOsm = true; map.removeLayer(tiles);
+    tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, className:'osm-tiles', attribution:'© OpenStreetMap contributors'}).addTo(map);
+    tiles.bringToBack();
+  });
+  const zoomCls = ()=> $('map').classList.toggle('zoomed-out', map.getZoom() < 9);
+  map.on('zoomend', zoomCls); zoomCls();
+  if(darkQ.addEventListener) darkQ.addEventListener('change', ()=>{ if(!usingOsm) tiles.setUrl(tileUrl()); labels.setUrl(labelUrl()); overlayCache.clear(); renderFrame(); chart && renderChart(); });
+  map.on('click', e => {
+    if(!state.picking) return;
+    const lat=+e.latlng.lat.toFixed(5), lon=+e.latlng.lng.toFixed(5);
+    setSite({id:uid(), name:'Picked location', addr:`${lat.toFixed(4)}, ${lon.toFixed(4)}`, lat, lon});
+    setPicking(false);
+    reverseLookup(lat, lon);
+  });
+}
+function fitMap(){
+  if(!state.sites.length) return;
+  map.setView([state.sites[0].lat, state.sites[0].lon], 10);
+}
+
+function renderOverlay(){
+  const g = state.grid; if(!g || !state.times.length){ if(overlay){ map.removeLayer(overlay); overlay=null; } return; }
+  const key = state.mode + '|' + state.frame + '|' + JSON.stringify(state.rules) + '|' + isDark();
+  let url = overlayCache.get(key);
+  if(!url){
+    const W=150, H=150, n=g.n, f=state.frame;
+    const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
+    const ctx = cv.getContext('2d'); const img = ctx.createImageData(W,H);
+    const get = (r,c,k) => { const v = g.cells[r*n+c][k][f]; return v==null ? NaN : v; };
+    const lvCol = [hexToRgb(cssVar('--lv0')), hexToRgb(cssVar('--lv1')), hexToRgb(cssVar('--lv2')), hexToRgb(cssVar('--lv3'))];
+    for(let y=0;y<H;y++){
+      const gy = y/(H-1)*(n-1), ra = Math.floor(gy), rb = Math.min(ra+1,n-1), fy = gy-ra;
+      for(let x=0;x<W;x++){
+        const gx = x/(W-1)*(n-1), ca = Math.floor(gx), cb = Math.min(ca+1,n-1), fx = gx-ca;
+        const bil = k => { const a=get(ra,ca,k), b=get(ra,cb,k), c=get(rb,ca,k), d=get(rb,cb,k);
+          return (a*(1-fx)+b*fx)*(1-fy) + (c*(1-fx)+d*fx)*fy; };
+        const t = bil('t'), rh = bil('rh'), ws = bil('ws');
+        const i4 = (y*W+x)*4;
+        if(!isFinite(t)){ img.data[i4+3]=0; continue; }
+        let col, a;
+        if(state.mode === 'risk'){
+          const lv = rawLevel(t, rh, feelsLike(t,rh,ws)).raw;
+          col = lvCol[lv]; a = lv===0 ? 0 : 150;
+        } else {
+          const v = state.mode==='feels' ? feelsLike(t,rh,ws) : t;
+          col = tempColor(v); a = 140;
+        }
+        const edge = Math.min(x, W-1-x, y, H-1-y) / (W*0.12);
+        img.data[i4]=col[0]; img.data[i4+1]=col[1]; img.data[i4+2]=col[2]; img.data[i4+3]=Math.round(a*Math.min(1,edge));
+      }
+    }
+    ctx.putImageData(img,0,0);
+    url = cv.toDataURL('image/png');
+    overlayCache.set(key, url);
+    if(overlayCache.size > 400) overlayCache.delete(overlayCache.keys().next().value);
+  }
+  const bounds = [[g.b.s, g.b.w],[g.b.n, g.b.e]];
+  if(!overlay){ overlay = L.imageOverlay(url, bounds, {opacity:1, interactive:false}).addTo(map); if(labels) labels.addTo(map); }
+  else { overlay.setUrl(url); overlay.setBounds(L.latLngBounds(bounds)); }
+}
+
+function pinHtml(si){
+  const s = state.sites[si], d = state.siteData[si], a = state.assess[si] && state.assess[si][state.frame];
+  const t = d ? d.t[state.frame] : null; const lv = a ? a.lvl : 0;
+  return `<div class="pin l${lv}${s.id===state.selected?' sel':''}" title="${esc(s.name)}"><span class="pin-t">${r0(t)}°</span><span class="pin-n">${esc(s.name)}</span></div>`;
+}
+function renderMarkers(){
+  const ids = new Set(state.sites.map(s=>s.id));
+  Object.keys(markers).forEach(id=>{ if(!ids.has(id)){ map.removeLayer(markers[id]); delete markers[id]; } });
+  state.sites.forEach((s,si)=>{
+    const html = pinHtml(si);
+    if(!markers[s.id]){
+      markers[s.id] = L.marker([s.lat,s.lon], {icon:L.divIcon({className:'pin-icon', html, iconSize:null}), keyboard:true, title:s.name, riseOnHover:true})
+        .addTo(map).on('click', ()=>selectSite(s.id));
+    } else {
+      markers[s.id].setLatLng([s.lat,s.lon]);
+      const el = markers[s.id].getElement(); if(el) el.innerHTML = html;
+    }
+    markers[s.id].setZIndexOffset(s.id===state.selected ? 1000 : (state.assess[si]?.[state.frame]?.lvl||0)*100);
+  });
+}
+
+function renderLegend(){
+  const L_ = $('legend');
+  if(state.mode === 'risk'){
+    L_.innerHTML = `<div class="chips">
+      <span><i class="sw" style="border:1px solid var(--line)"></i>None</span>
+      <span><i class="sw" style="background:var(--lv1)"></i>Caution</span>
+      <span><i class="sw" style="background:var(--lv2)"></i>Stop-work</span>
+      <span><i class="sw" style="background:var(--lv3)"></i>Extreme</span></div>`;
+  } else {
+    const grad = TEMP_STOPS.map(([v,c])=>`rgb(${c.join(',')}) ${((v-14)/(44-14)*100).toFixed(1)}%`).join(',');
+    L_.innerHTML = `<div>${state.mode==='feels'?'Feels like':'Air temp'} (°C)</div>
+      <div class="ramp" style="background:linear-gradient(90deg,${grad})"></div>
+      <div class="ticks"><span>15</span><span>25</span><span>30</span><span>35</span><span>40</span><span>44</span></div>`;
+  }
+}
+
+/* ---------- Timeline ---------- */
+let playTimer = null;
+const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
+function setPlaying(on){
+  clearInterval(playTimer); playTimer = null;
+  $('playBtn').innerHTML = on ? ICON_PAUSE : ICON_PLAY;
+  $('playBtn').setAttribute('aria-label', on ? 'Pause time-lapse' : 'Play time-lapse');
+  if(on && state.times.length){
+    playTimer = setInterval(()=>{ setFrame((state.frame+1) % state.times.length); }, Number($('speedSel').value));
+  }
+}
+function renderStrip(){
+  const N = state.times.length; const strip = $('strip'), days = $('days');
+  $('slider').max = Math.max(0, N-1);
+  if(!N){ strip.innerHTML=''; days.innerHTML=''; return; }
+  let html = '', dh = '';
+  for(let i=0;i<N;i++){
+    let worst = 0; state.assess.forEach(A=>{ worst = Math.max(worst, A[i].lvl); });
+    const p = parseLocal(state.times[i]);
+    const off = state.rules.workOnly && !inShift(p.h);
+    html += `<i class="l${worst}${off?' off':''}${p.h===0&&i>0?' day':''}"></i>`;
+    if(p.h===0 || i===0){
+      const left = (i/N*100);
+      if(i===0 && p.h>18 && N>6) continue;
+      dh += `<span style="left:${left.toFixed(2)}%">${DOW[p.dow]} ${p.d}</span>`;
+    }
+  }
+  strip.innerHTML = html; days.innerHTML = dh;
+}
+function renderTime(){
+  if(!state.times.length){ $('tlTime').textContent='–'; $('tlRel').textContent=''; return; }
+  $('tlTime').textContent = fmtTime(state.times[state.frame]);
+  $('tlRel').textContent = state.frame===0 ? 'This hour' : `In ${state.frame} hour${state.frame===1?'':'s'}`;
+  $('slider').value = state.frame;
+}
+function setFrame(i){
+  state.frame = Math.max(0, Math.min(i, state.times.length-1));
+  renderFrame();
+}
+function renderFrame(){
+  renderTime(); renderOverlay(); renderMarkers(); renderNowList(); if(chart) chart.draw();
+}
+
+/* ---------- Sidebar ---------- */
+function renderNowList(){
+  const box = $('nowBox'); const f = state.frame;
+  const d = state.siteData[0], A = state.assess[0];
+  if(!state.sites.length){ box.innerHTML = '<p class="empty" style="padding:0">Search for your site address to see its forecast.</p>'; $('nowHint').textContent=''; return; }
+  if(!d || !A || !state.times.length){ box.innerHTML = '<p class="empty" style="padding:0">Waiting for the forecast.</p>'; return; }
+  const a = A[f];
+  $('nowHint').textContent = a.off ? 'Outside shift' : '';
+  const badge = a.lvl ? `<span class="badge l${a.lvl}">${LEVELS[a.lvl].label}</span>` : (a.raw ? `<span class="badge">${LEVELS[a.raw].short}, outside shift</span>` : `<span class="badge">No trigger</span>`);
+  box.innerHTML = `<div>${badge}</div>
+    <div class="readout">
+      <div><b>${r0(d.t[f])}°</b><span>Air temp</span></div>
+      <div><b>${r0(d.fl[f])}°</b><span>Feels like</span></div>
+      <div><b>${r0(d.rh[f])}%</b><span>Humidity</span></div>
+    </div>
+    <p class="why">${a.why.length ? 'Triggered by: ' + esc(a.why.join(', ')) + '.' : 'Below all trigger levels at this hour.'} Wind ${r0(d.ws[f]==null?null:d.ws[f]*3.6)} km/h.</p>`;
+}
+
+function renderSitePanel(){
+  const s = state.sites[0];
+  $('exampleNote').hidden = !(s && s.example);
+  if(document.activeElement !== $('siteName')) $('siteName').value = s ? s.name : '';
+  $('siteAddr').textContent = s ? (s.addr || `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}`) : 'No site selected';
+  $('brandSite').textContent = s ? s.name : 'your site';
+}
+function setSite(s){
+  state.sites = [s]; state.selected = s.id;
+  state.siteData = []; state.assess = []; state.events = []; state.times = []; state.grid = null;
+  overlayCache.clear(); save(); fitMap(); renderAll(); refresh();
+}
+function shortName(r){ return r.short || r.name; }
+async function geocode(q){
+  const tries = [
+    async () => {
+      const u = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({q, format:'jsonv2', countrycodes:'au', limit:'6', addressdetails:'1'});
+      const j = await (await fetch(u)).json();
+      return j.map(r=>{ const a=r.address||{}; const street=[a.house_number,a.road].filter(Boolean).join(' ');
+        const sub=a.suburb||a.town||a.city||a.village||'';
+        return {short: street ? `${street}, ${sub}` : (r.name || sub || r.display_name.split(',')[0]), name: r.display_name, lat:+r.lat, lon:+r.lon}; });
+    },
+    async () => {
+      const u = 'https://photon.komoot.io/api/?' + new URLSearchParams({q, limit:'6', lang:'en', bbox:'112,-44,154,-10'});
+      const j = await (await fetch(u)).json();
+      return (j.features||[]).map(f=>{ const p=f.properties; const street=[p.housenumber,p.street].filter(Boolean).join(' ');
+        const sub=p.district||p.city||p.name||'';
+        return {short: street ? `${street}, ${sub}` : (p.name||sub), name:[street,p.name!==street?p.name:'',p.city,p.state,p.postcode].filter(Boolean).join(', '), lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0]}; });
+    },
+    async () => {
+      const u = 'https://geocoding-api.open-meteo.com/v1/search?' + new URLSearchParams({name:q, count:'6', language:'en', countryCode:'AU', format:'json'});
+      const j = await (await fetch(u)).json();
+      return (j.results||[]).map(r=>({short:r.name, name:[r.name,r.admin2,r.admin1].filter(Boolean).join(', '), lat:r.latitude, lon:r.longitude}));
+    }
+  ];
+  let anyOk = false;
+  for(const t of tries){ try{ const r = await t(); anyOk = true; if(r.length) return r; }catch(e){} }
+  if(!anyOk) throw new Error('search unavailable');
+  return [];
+}
+async function reverseLookup(lat, lon){
+  try{
+    const u = 'https://nominatim.openstreetmap.org/reverse?' + new URLSearchParams({lat, lon, format:'jsonv2', zoom:'17', addressdetails:'1'});
+    const r = await (await fetch(u)).json(); if(!r || !r.address) return;
+    const a = r.address; const s = state.sites[0]; if(!s || s.lat!==lat || s.lon!==lon) return;
+    const street=[a.house_number,a.road].filter(Boolean).join(' '); const sub=a.suburb||a.town||a.city||a.village||'';
+    s.name = street ? `${street}, ${sub}` : (sub || s.name); s.addr = r.display_name;
+    save(); renderSitePanel(); renderMarkers();
+  }catch(e){}
+}
+
+function renderRules(){
+  const R = state.rules;
+  $('rCaution').value=R.caution; $('rStop').value=R.stop; $('rHumAir').value=R.humidAir; $('rHumRh').value=R.humidRh;
+  $('rExt').value=R.extreme; $('rWs').value=R.workStart; $('rWe').value=R.workEnd; $('rWork').checked=R.workOnly;
+}
+
+/* ---------- Status board ---------- */
+function renderBoard(){
+  const edge = $('boardEdge'), hl = $('headline'), sub = $('subline'), meta = $('meta');
+  edge.className = 'board-edge';
+  if(state.error){
+    const k = state.error.kind;
+    hl.textContent = k==='network' ? 'Open this page in your web browser' : 'The forecast didn’t load';
+    sub.textContent = k==='network'
+      ? 'The page can’t reach the weather service from here. If you opened it inside the Claude app, save the file and open it in Chrome, Edge or Safari instead. Otherwise check your internet connection and select Refresh forecast.'
+      : k==='forbidden'
+      ? 'The weather service refused the request (error 403). This usually means a work network or browser preview is blocking it. Open the file directly in Chrome, Edge or Safari, or try another network.'
+      : 'The weather service returned an error: ' + (state.error.message||state.error) + '. Select Refresh forecast to try again.';
+    meta.textContent = ''; return;
+  }
+  if(!state.sites.length){ hl.textContent='Enter your site address'; sub.textContent='Search for a street address or suburb, or pick the spot on the map.'; meta.textContent=''; return; }
+  if(!state.times.length){ return; }
+  const ev = state.events.slice().sort((a,b)=> b.peak-a.peak || a.start-b.start);
+  if(!ev.length){
+    hl.innerHTML = `<span class="plate">Clear</span>No heat triggers in the next 72 hours`;
+    const d = state.siteData[0]; const mx = Math.max(...d.t.filter(v=>v!=null));
+    sub.textContent = `Highest forecast air temp is ${r0(mx)}°C${state.rules.workOnly?', checked during work hours':''}. Keep normal hydration and shade controls in place.`;
+  } else {
+    const w = ev[0];
+    edge.classList.add('l'+w.peak);
+    hl.innerHTML = `<span class="plate l${w.peak}">${LEVELS[w.peak].label}</span>${esc(fmtSpan(state.times[w.start], evFinish(w)))}`;
+    sub.textContent = `Peak ${r0(w.maxT)}°C air, feels like ${r0(w.maxFl)}°C. ${state.events.length} trigger period${state.events.length===1?'':'s'} in the next 72 hours; see the trigger log below.`;
+  }
+  const t = state.updated ? state.updated.toLocaleTimeString('en-AU',{timeZone:TZ,hour:'numeric',minute:'2-digit'}) : '';
+  meta.textContent = `Forecast from the ${state.source}. Updated ${t} Brisbane time.`;
+}
+
+/* ---------- Chart ---------- */
+let chart = null;
+const hwPlugin = {
+  id:'hw',
+  beforeDatasetsDraw(c){
+    const {ctx, chartArea:a, scales:{x,y}} = c; const N = state.times.length; if(!N) return;
+    const step = N>1 ? x.getPixelForValue(1)-x.getPixelForValue(0) : a.width;
+    ctx.save();
+    ctx.fillStyle = cssVar('--shade');
+    state.times.forEach((tm,i)=>{ if(!inShift(parseLocal(tm).h)){ const px=x.getPixelForValue(i); ctx.fillRect(px-step/2, a.top, step, a.bottom-a.top); } });
+    const R = state.rules;
+    [[R.caution,'--lv1','Caution, feels like'],[R.stop,'--lv2','Stop-work'],[R.extreme,'--lv3','Extreme']].forEach(([v,col,lab])=>{
+      const py = y.getPixelForValue(v); if(py<a.top||py>a.bottom) return;
+      ctx.strokeStyle = cssVar(col); ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.moveTo(a.left,py); ctx.lineTo(a.right,py); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = cssVar(col); ctx.font = '600 11px Barlow, sans-serif'; ctx.textAlign='right';
+      ctx.fillText(`${lab} ${v}°`, a.right-4, py-4);
+    });
+    ctx.restore();
+  },
+  afterDatasetsDraw(c){
+    const {ctx, chartArea:a, scales:{x}} = c; if(!state.times.length) return;
+    const px = x.getPixelForValue(state.frame);
+    ctx.save(); ctx.strokeStyle = cssVar('--ink'); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px,a.top); ctx.lineTo(px,a.bottom); ctx.stroke(); ctx.restore();
+  }
+};
+function renderChart(){
+  const si = state.sites.findIndex(s=>s.id===state.selected);
+  const box = $('chart');
+  if(si<0 || !state.times.length || !state.siteData[si]){ if(chart){ chart.destroy(); chart=null; } $('chartTitle').textContent = si>=0 ? `Hourly forecast, ${state.sites[si].name} (loading)` : 'Hourly forecast'; return; }
+  const d = state.siteData[si];
+  $('chartTitle').textContent = 'Hourly forecast';
+  const ink = cssVar('--ink'), grid = cssVar('--line-2'), muted = cssVar('--ink-3');
+  const labels = state.times.map(t=>t);
+  const data = {
+    labels,
+    datasets:[
+      {label:'Air temp', data:d.t, borderColor:ink, backgroundColor:ink, borderWidth:2.2, pointRadius:0, tension:.3, yAxisID:'y', spanGaps:true},
+      {label:'Feels like', data:d.fl.map(v=>v==null?null:Math.round(v*10)/10), borderColor:cssVar('--lv2'), borderDash:[6,4], borderWidth:2, pointRadius:0, tension:.3, yAxisID:'y', spanGaps:true},
+      {label:'Humidity', data:d.rh, borderColor:cssVar('--hum'), borderWidth:1.4, pointRadius:0, tension:.3, yAxisID:'y1', spanGaps:true}
+    ]
+  };
+  const opts = {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    interaction:{mode:'index', intersect:false},
+    onClick:(e,els,c)=>{ const x = c.scales.x.getValueForPixel(e.x); if(x!=null) setFrame(Math.round(x)); },
+    plugins:{legend:{display:false}, tooltip:{callbacks:{
+      title:items=>fmtTime(state.times[items[0].dataIndex]),
+      label:it=>`${it.dataset.label}: ${Math.round(it.parsed.y)}${it.dataset.yAxisID==='y1'?'%':'°C'}`
+    }}},
+    scales:{
+      x:{grid:{color:grid}, ticks:{color:muted, autoSkip:false, maxRotation:0, callback:(v,i)=>{ const p=parseLocal(state.times[i]); return p.h===0 ? `${DOW[p.dow]} ${p.d}` : (p.h%6===0 ? fmtHour(p.h) : ''); }}},
+      y:{position:'left', suggestedMin:15, suggestedMax:42, grid:{color:grid}, ticks:{color:muted, callback:v=>v+'°'}},
+      y1:{position:'right', min:0, max:100, grid:{display:false}, ticks:{color:muted, callback:v=>v+'%', stepSize:25}}
+    }
+  };
+  if(chart){ chart.data = data; chart.options = opts; chart.update('none'); }
+  else chart = new Chart(box, {type:'line', data, options:opts, plugins:[hwPlugin]});
+}
+
+/* ---------- Tables ---------- */
+function renderOutlook(){
+  const tb = $('outlook');
+  const d = state.siteData[0], A = state.assess[0];
+  if(!state.times.length || !d || !A){ tb.innerHTML = '<tbody><tr><td class="empty">No forecast loaded.</td></tr></tbody>'; return; }
+  const dayKeys = [...new Set(state.times.map(t=>t.slice(0,10)))];
+  const head = `<thead><tr><th>Day</th><th class="num">Max air</th><th class="num">Max feels like</th><th class="num">Humidity at max</th><th>Worst level</th><th class="num">Hours on alert</th><th>Alert start</th><th>Alert finish</th></tr></thead>`;
+  const body = dayKeys.map(k=>{
+    let mx=-Infinity, rhAt=null, mf=-Infinity, lv=0, n=0, first=-1, last=-1, alertH=0;
+    state.times.forEach((t,i)=>{ if(t.slice(0,10)!==k) return; n++;
+      if(d.t[i]!=null && d.t[i]>mx){ mx=d.t[i]; rhAt=d.rh[i]; }
+      if(d.fl[i]!=null && d.fl[i]>mf) mf=d.fl[i];
+      lv=Math.max(lv,A[i].lvl); if(A[i].lvl>=1){ if(first<0) first=i; last=i; alertH++; } });
+    const part = n < 24 ? ` <small class="hint">(${n} h of forecast)</small>` : '';
+    return `<tr><td><strong>${fmtDay(k)}</strong>${part}</td><td class="num">${r0(mx)}°C</td><td class="num">${r0(mf)}°C</td><td class="num">${r0(rhAt)}%</td>
+      <td><span class="badge${lv?' l'+lv:''}">${LEVELS[lv].short}</span></td>
+      <td class="num">${first<0?'–':fmtDur(alertH)}</td>
+      <td>${first<0?'–':fmtClock(state.times[first])}</td><td>${first<0?'–':fmtClock(addHour(state.times[last]))}</td></tr>`;
+  }).join('');
+  tb.innerHTML = head + '<tbody>' + body + '</tbody>';
+}
+
+function renderEvents(){
+  const tb = $('events');
+  const head = `<thead><tr><th>Date</th><th>Level</th><th class="num">Peak air</th><th class="num">Peak feels like</th><th class="num">Humidity at peak</th><th>Triggered by</th><th class="num">Duration</th><th>Start</th><th>Finish</th></tr></thead>`;
+  if(!state.times.length){ tb.innerHTML = head + '<tbody><tr><td colspan="9" class="empty">No forecast loaded.</td></tr></tbody>'; return; }
+  if(!state.events.length){ tb.innerHTML = head + `<tbody><tr><td colspan="9" class="empty">No triggers in the next 72 hours${state.rules.workOnly?' during work hours':''}.</td></tr></tbody>`; return; }
+  const body = state.events.map((e,ei)=>{
+    const st = state.times[e.start], fin = evFinish(e);
+    const sameDay = parseLocal(fin).dayKey === parseLocal(st).dayKey;
+    const finTxt = (sameDay ? fmtClock(fin) : fmtTime(fin)) + (e.end+1 >= state.times.length ? ' (end of forecast)' : '');
+    return `<tr class="click" data-ev="${ei}">
+      <td><strong>${esc(fmtDay(parseLocal(st).dayKey))}</strong></td>
+      <td><span class="badge l${e.peak}">${LEVELS[e.peak].short}</span></td>
+      <td class="num">${r0(e.maxT)}°C</td><td class="num">${r0(e.maxFl)}°C</td><td class="num">${r0(e.rhAtPeak)}%</td>
+      <td class="wrap-ok">${esc(e.why.join(', '))}</td>
+      <td class="num">${fmtDur(e.end-e.start+1)}</td>
+      <td>${esc(fmtClock(st))}</td><td>${esc(finTxt)}</td></tr>`;
+  }).join('');
+  tb.innerHTML = head + '<tbody>' + body + '</tbody>';
+}
+
+/* ---------- Alert text ---------- */
+function alertText(){
+  if(!state.times.length) return '';
+  const site = state.sites[0];
+  const lines = [`Heat alert for ${site.name}${site.addr && site.addr!==site.name ? ' (' + site.addr + ')' : ''}, next 72 hours from ${fmtTime(state.times[0])}`];
+  if(!state.events.length){ lines.push('No heat triggers forecast.'); }
+  state.events.slice().sort((a,b)=>b.peak-a.peak||a.start-b.start).forEach(e=>{
+    lines.push(`${LEVELS[e.peak].label}: ${fmtSpan(state.times[e.start], evFinish(e))} (${fmtDur(e.end-e.start+1)}). Peak ${r0(e.maxT)}°C, feels like ${r0(e.maxFl)}°C. ${e.why.join(', ')}.`);
+  });
+  lines.push('Plan early starts, extra rest breaks, shade and water. Confirm on site with the WHSQ heat stress calculator.');
+  return lines.join('\n');
+}
+async function copyAlert(){
+  const txt = alertText(); if(!txt){ toast('Load the forecast first'); return; }
+  try{ await navigator.clipboard.writeText(txt); toast('Alert text copied'); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); toast('Alert text copied'); }catch(_){ toast('Copy failed, select the text manually'); } ta.remove(); }
+}
+
+/* ---------- Actions ---------- */
+function selectSite(id){
+  state.selected = id; renderMarkers(); renderNowList(); renderChart();
+}
+function setPicking(on){
+  state.picking = on; $('pickBtn').setAttribute('aria-pressed', on); $('map').classList.toggle('picking', on);
+  $('mapHint').textContent = on ? 'Tap the map where the site is.' : 'Press play to step through the next 72 hours.';
+}
+function renderAll(){
+  if(state.times.length) computeAssessments(); else { state.assess=[]; state.events=[]; }
+  renderBoard(); renderStrip(); renderLegend(); renderFrame(); renderChart(); renderOutlook(); renderEvents(); renderSitePanel();
+  document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.mode===state.mode));
+}
+let refetchT = null;
+function scheduleRefetch(){ clearTimeout(refetchT); refetchT = setTimeout(refresh, 400); }
+
+function bind(){
+  $('refreshBtn').addEventListener('click', refresh);
+  $('copyBtn').addEventListener('click', copyAlert);
+  $('playBtn').addEventListener('click', ()=> setPlaying(!playTimer));
+  $('speedSel').addEventListener('change', ()=>{ if(playTimer) setPlaying(true); });
+  $('nowBtn').addEventListener('click', ()=>{ setPlaying(false); setFrame(0); });
+  $('slider').addEventListener('input', e=>{ setPlaying(false); setFrame(Number(e.target.value)); });
+  document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click', ()=>{
+    state.mode = b.dataset.mode; save();
+    document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+    renderLegend(); renderOverlay();
+  }));
+  $('events').addEventListener('click', e=>{
+    const tr=e.target.closest('tr[data-ev]'); if(!tr) return; const ev=state.events[Number(tr.dataset.ev)];
+    setPlaying(false); setFrame(ev.start);
+    document.querySelector('.map-panel').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'start'});
+  });
+
+  // Site name
+  $('siteName').addEventListener('change', e=>{
+    const s = state.sites[0]; if(!s) return;
+    s.name = e.target.value.trim() || 'My site'; delete s.example; save(); renderSitePanel(); renderMarkers();
+  });
+  $('pickBtn').addEventListener('click', ()=> setPicking(!state.picking));
+
+  // Search
+  let sT=null; const res=$('results');
+  const runSearch = async q => {
+    try{
+      const list = await geocode(q);
+      res.innerHTML = list.length ? list.map((r,i)=>`<li><button type="button" data-i="${i}">${esc(shortName(r))}<br><small>${esc(r.name)}</small></button></li>`).join('')
+        : '<li class="empty" style="padding:8px">No matches in Australia. Try the street name and suburb, or pick on the map.</li>';
+      res._list = list; res.classList.add('open');
+    }catch(err){
+      res.innerHTML='<li class="empty" style="padding:8px">Address search can’t be reached from here. Open the file in your web browser, or pick the site on the map.</li>'; res.classList.add('open');
+    }
+  };
+  $('searchIn').addEventListener('input', e=>{
+    clearTimeout(sT); const q=e.target.value.trim();
+    if(q.length<3){ res.classList.remove('open'); return; }
+    sT = setTimeout(()=>runSearch(q), 700);
+  });
+  $('searchIn').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(sT); const q=e.target.value.trim(); if(q.length>=3) runSearch(q); } });
+  res.addEventListener('click', e=>{
+    const b=e.target.closest('button[data-i]'); if(!b) return; const r=res._list[Number(b.dataset.i)];
+    res.classList.remove('open'); $('searchIn').value='';
+    setSite({id:uid(), name:shortName(r), addr:r.name, lat:+(+r.lat).toFixed(5), lon:+(+r.lon).toFixed(5)});
+    toast('Site set to ' + shortName(r));
+  });
+  document.addEventListener('click', e=>{ if(!e.target.closest('.search')) res.classList.remove('open'); });
+
+  // Rules
+  const ruleMap = {rCaution:'caution', rStop:'stop', rHumAir:'humidAir', rHumRh:'humidRh', rExt:'extreme', rWs:'workStart', rWe:'workEnd'};
+  Object.entries(ruleMap).forEach(([id,k])=>$(id).addEventListener('change', e=>{
+    const v = Number(e.target.value); if(!isFinite(v)){ renderRules(); return; }
+    state.rules[k] = v; save(); overlayCache.clear(); renderAll();
+  }));
+  $('rWork').addEventListener('change', e=>{ state.rules.workOnly = e.target.checked; save(); renderAll(); });
+  $('resetRules').addEventListener('click', ()=>{ state.rules = {...DEFAULT_RULES}; save(); renderRules(); overlayCache.clear(); renderAll(); toast('Default rules restored'); });
+
+  // Keyboard on timeline
+  document.addEventListener('keydown', e=>{
+    if(e.target.closest('input,select,textarea')) return;
+    if(e.key==='ArrowRight'){ setPlaying(false); setFrame(state.frame+1); }
+    if(e.key==='ArrowLeft'){ setPlaying(false); setFrame(state.frame-1); }
+    if(e.key===' ' && e.target===document.body){ e.preventDefault(); setPlaying(!playTimer); }
+  });
+}
+
+/* ---------- Start ---------- */
+load();
+initMap();
+bind();
+renderRules();
+setPlaying(false);
+renderAll();
+fitMap();
+refresh();
+setInterval(refresh, 60*60*1000);
+})();
+</script>
+</body>
+</html>
