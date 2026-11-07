@@ -12,4 +12,10 @@
 
 Forecast guidance only. Work decisions follow CMC's heat management plan, the project's EBA and on-site checks such as the WHSQ heat stress calculator.
 
-Weather data by Open-Meteo.com (CC BY 4.0). Address search © OpenStreetMap contributors. Map tiles © Esri.
+## Forecast data
+
+1. **MET Norway** Locationforecast API (main source). Free for any use under CC BY 4.0, no key needed.
+2. **Open-Meteo** (automatic backup if MET Norway doesn't answer).
+3. **Saved copy**: the last good forecast is kept in each browser and shown (clearly marked) for up to 24 hours if both services are down. Within 30 minutes of a fetch, reloading the page reuses the saved copy instead of calling the services again.
+
+Weather data from MET Norway (CC BY 4.0) and Open-Meteo.com (CC BY 4.0). Address search © OpenStreetMap contributors. Map tiles © Esri.

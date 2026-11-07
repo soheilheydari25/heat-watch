@@ -380,7 +380,7 @@ footer a{color:inherit}
 
   <footer>
     <p>Forecast guidance only. Work decisions follow CMC's heat management plan, the project's EBA, and on-site checks such as the <a href="https://onlineservices.oir.qld.gov.au/etools/views/calc/heatStress.xhtml" target="_blank" rel="noopener">WHSQ heat stress calculator</a>. Feels like is calculated with the Bureau of Meteorology apparent temperature formula from air temperature, humidity and wind. Rain is the forecast precipitation in millimetres.</p>
-    <p>Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0), using the Bureau of Meteorology ACCESS-G model where available. Address search © OpenStreetMap contributors (Nominatim, Photon). Map tiles © Esri.</p>
+    <p>Weather data from <a href="https://api.met.no/" target="_blank" rel="noopener">MET Norway</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>), with <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0) as an automatic backup. Hourly values beyond about 2.5 days are interpolated from 6-hour steps. Address search © OpenStreetMap contributors (Nominatim, Photon). Map tiles © Esri.</p>
   </footer>
 </div>
 <div class="toast" id="toast" role="status"></div>
@@ -526,65 +526,167 @@ function gridBounds(){
   return {s,n,w,e};
 }
 
-async function fetchForecast(points){
-  const build = model => {
-    const q = new URLSearchParams({
-      latitude: points.map(p=>p.lat.toFixed(4)).join(','),
-      longitude: points.map(p=>p.lon.toFixed(4)).join(','),
-      hourly: 'temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,precipitation_probability',
-      wind_speed_unit: 'ms', timezone: TZ, forecast_days: '4'
-    });
-    if(model) q.set('models', model);
-    return 'https://api.open-meteo.com/v1/forecast?' + q.toString();
+/* ---------- Forecast sources ----------
+   1. MET Norway Locationforecast (free, CC BY 4.0, any use)  -> main source
+   2. Open-Meteo (free, CC BY 4.0)                             -> automatic backup
+   3. Last good forecast saved in this browser                 -> used when both are down */
+const FETCH_TIMEOUT = 15000;
+const CACHE_KEY = 'heatwatch.forecast.v1';
+const CACHE_FRESH_MIN = 30;   // reuse a saved forecast this young instead of calling the services again
+const CACHE_MAX_HOURS = 24;   // oldest saved forecast shown when every service is down
+const MET_GRID_N = 5;         // map shading points from MET Norway (one request each)
+const BNE_OFFSET = 10*3600e3; // Brisbane is UTC+10 all year (no daylight saving)
+
+async function fetchJSON(url){
+  const ctl = new AbortController(); const timer = setTimeout(()=>ctl.abort(), FETCH_TIMEOUT);
+  try{
+    let res;
+    try{ res = await fetch(url, {signal: ctl.signal}); }
+    catch(e){ const er = new Error(e.name==='AbortError' ? 'timed out' : 'unreachable'); er.kind = 'network'; throw er; }
+    if(!res.ok){ const er = new Error('error ' + res.status); er.kind = res.status===403 ? 'forbidden' : 'http'; throw er; }
+    return await res.json();
+  }finally{ clearTimeout(timer); }
+}
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+async function pool(items, limit, fn){
+  const out = new Array(items.length); let next = 0;
+  const worker = async()=>{ while(next < items.length){ const k = next++; try{ out[k] = await fn(items[k], k); }catch(e){ out[k] = null; } } };
+  await Promise.all(Array.from({length: Math.min(limit, items.length)}, worker));
+  return out;
+}
+function hourKeys(n){
+  const p = parseLocal(nowLocalKey()); const base = Date.UTC(p.y, p.m-1, p.d, p.h);
+  const z = v => String(v).padStart(2,'0');
+  return Array.from({length:n}, (_,i)=>{ const d = new Date(base + i*3600e3);
+    return `${d.getUTCFullYear()}-${z(d.getUTCMonth()+1)}-${z(d.getUTCDate())}T${z(d.getUTCHours())}:00`; });
+}
+function keyToUtc(k){ const p = parseLocal(k); return Date.UTC(p.y, p.m-1, p.d, p.h) - BNE_OFFSET; }
+function withFeels(s){ s.fl = s.t.map((v,i)=>feelsLike(v, s.rh[i], s.ws[i])); return s; }
+function enough(s){ return !!s && s.t.filter(v=>v!=null).length >= 60 && s.rh.filter(v=>v!=null).length >= 60; }
+function gridPoints(b, n){
+  const pts = [];
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) pts.push({lat: b.n - r*(b.n-b.s)/(n-1), lon: b.w + c*(b.e-b.w)/(n-1)});
+  return pts;
+}
+function fillGaps(cells, n){ // a missing map point borrows its nearest neighbour
+  const have = cells.map((c,i)=>c ? i : -1).filter(i=>i>=0);
+  return cells.map((c,i)=>{ if(c) return c; let best = null, bd = Infinity;
+    for(const j of have){ const d = (Math.floor(i/n)-Math.floor(j/n))**2 + (i%n - j%n)**2; if(d < bd){ bd = d; best = cells[j]; } }
+    return best; });
+}
+
+/* MET Norway: hourly for ~2.5 days, then 6-hourly; fill to hourly */
+function metSeries(json, keys){
+  const ts = (json && json.properties && json.properties.timeseries) || [];
+  const pts = ts.map(x=>({u: Date.parse(x.time), d: x.data || {}})).filter(x=>isFinite(x.u)).sort((a,b)=>a.u-b.u);
+  const inst = (u, f) => {
+    let a = null, b = null;
+    for(const x of pts){
+      const v = x.d.instant && x.d.instant.details ? x.d.instant.details[f] : null; if(v == null) continue;
+      if(x.u <= u) a = {u:x.u, v}; if(x.u >= u){ b = {u:x.u, v}; break; }
+    }
+    if(a && a.u === u) return a.v; if(b && b.u === u) return b.v;
+    if(a && b && b.u - a.u <= 6*3600e3) return a.v + (b.v - a.v) * (u - a.u) / (b.u - a.u);
+    return null;
   };
-  const attempts = [['bom_access_global','BOM ACCESS-G model'], [null,'Open-Meteo best-match models (BOM ACCESS-G unavailable)']];
-  let lastErr = null;
-  for(const [model,label] of attempts){
-    try{
-      let res;
-      try{ res = await fetch(build(model)); }
-      catch(netErr){ const er = new Error('blocked'); er.kind = 'network'; throw er; }
-      let j = {}; try{ j = await res.json(); }catch(_){}
-      if(!res.ok || j.error){ const er = new Error(j.reason || ('the weather service answered with error ' + res.status)); er.kind = res.status===403 ? 'forbidden' : 'http'; throw er; }
-      const arr = Array.isArray(j) ? j : [j];
-      const ok = arr.length === points.length && arr.every(l => l.hourly && Array.isArray(l.hourly.temperature_2m)
-        && l.hourly.temperature_2m.slice(0,96).filter(v=>v!=null).length > 60
-        && l.hourly.relative_humidity_2m && l.hourly.relative_humidity_2m.slice(0,96).filter(v=>v!=null).length > 60);
-      if(!ok) throw new Error('Incomplete data from '+(model||'default')+' model');
-      return {arr, label};
-    }catch(e){ lastErr = e; if(e.kind==='network' || e.kind==='forbidden') break; }
+  const rain = u => {
+    for(let i = pts.length-1; i >= 0; i--){
+      const x = pts[i]; if(x.u > u) continue; if(u - x.u >= 12*3600e3) break;
+      const n1 = x.d.next_1_hours, n6 = x.d.next_6_hours;
+      if(n1 && u < x.u + 3600e3 && n1.details && n1.details.precipitation_amount != null) return n1.details.precipitation_amount;
+      if(n6 && u < x.u + 6*3600e3 && n6.details && n6.details.precipitation_amount != null) return n6.details.precipitation_amount / 6;
+    }
+    return null;
+  };
+  const us = keys.map(keyToUtc);
+  return withFeels({ t: us.map(u=>inst(u,'air_temperature')), rh: us.map(u=>inst(u,'relative_humidity')),
+    ws: us.map(u=>inst(u,'wind_speed')), p: us.map(rain), pp: us.map(()=>null) });
+}
+async function metPoint(pt, keys, tries){
+  const url = 'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=' + (+pt.lat).toFixed(4) + '&lon=' + (+pt.lon).toFixed(4);
+  let lastErr;
+  for(let attempt = 0; attempt < (tries || 1); attempt++){
+    if(attempt) await sleep(1500 + Math.random()*1000);
+    try{ const s = metSeries(await fetchJSON(url), keys); if(!enough(s)) throw new Error('incomplete data'); return s; }
+    catch(e){ lastErr = e; if(e.kind === 'forbidden') break; }
   }
   throw lastErr;
 }
 
-async function refresh(){
+/* Open-Meteo: many points in one request */
+async function openMeteo(points, keys){
+  const q = new URLSearchParams({
+    latitude: points.map(p=>(+p.lat).toFixed(4)).join(','), longitude: points.map(p=>(+p.lon).toFixed(4)).join(','),
+    hourly: 'temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,precipitation_probability',
+    wind_speed_unit: 'ms', timezone: TZ, forecast_days: '5'
+  });
+  const j = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + q.toString());
+  const arr = Array.isArray(j) ? j : [j];
+  if(arr.length !== points.length) throw new Error('incomplete data');
+  return arr.map(l=>{ const h = l.hourly || {}; const idx = new Map((h.time || []).map((t,i)=>[t,i]));
+    const pick = f => keys.map(k=>{ const i = idx.get(k); const v = i == null ? null : (h[f] || [])[i]; return v == null ? null : v; });
+    return withFeels({t: pick('temperature_2m'), rh: pick('relative_humidity_2m'), ws: pick('wind_speed_10m'), p: pick('precipitation'), pp: pick('precipitation_probability')}); });
+}
+
+async function loadForecast(site){
+  const keys = hourKeys(HOURS), b = gridBounds(), errs = [];
+  try{ // main: MET Norway (the site first; map points only once the site has answered)
+    const siteS = await metPoint(site, keys, 2);
+    const cells = await pool(gridPoints(b, MET_GRID_N), 4, p=>metPoint(p, keys, 1));
+    let grid = null;
+    if(cells.filter(Boolean).length >= cells.length * 0.6) grid = {n: MET_GRID_N, b, cells: fillGaps(cells, MET_GRID_N)};
+    else { try{ grid = {n: GRID_N, b, cells: await openMeteo(gridPoints(b, GRID_N), keys)}; }catch(e){} }
+    return {keys, site: siteS, grid, source: 'MET Norway', backup: false};
+  }catch(e){ errs.push(e); }
+  try{ // backup: Open-Meteo
+    const gpts = gridPoints(b, GRID_N);
+    const arr = await openMeteo([{lat:site.lat, lon:site.lon}, ...gpts], keys);
+    if(!enough(arr[0])) throw new Error('incomplete data');
+    return {keys, site: arr[0], grid: {n: GRID_N, b, cells: arr.slice(1)}, source: 'Open-Meteo', backup: true};
+  }catch(e){ errs.push(e); }
+  const er = new Error('neither forecast service answered'); er.kind = errs.every(x=>x.kind === 'network') ? 'network' : 'http';
+  throw er;
+}
+
+function readCache(site){
+  try{ const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if(!c || !c.f || Math.abs(c.lat - site.lat) > 1e-4 || Math.abs(c.lon - site.lon) > 1e-4) return null; return c; }
+  catch(e){ return null; }
+}
+function saveCache(site, f){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({lat: site.lat, lon: site.lon, savedAt: Date.now(), f})); }catch(e){} }
+function alignTo(f, keys){ // move a saved forecast onto the current hours
+  const idx = new Map(f.keys.map((k,i)=>[k,i]));
+  const move = s => { if(!s) return s; const o = {};
+    for(const k of ['t','rh','ws','p','pp','fl']) o[k] = keys.map(key=>{ const i = idx.get(key); return i == null || !s[k] ? null : (s[k][i] == null ? null : s[k][i]); });
+    return o; };
+  const site = move(f.site);
+  let n = keys.length; while(n > 0 && site.t[n-1] == null) n--;
+  const cut = s => { if(!s) return s; const o = {}; for(const k in s) o[k] = s[k].slice(0, n); return o; };
+  return {keys: keys.slice(0, n), site: cut(site), grid: f.grid ? {n: f.grid.n, b: f.grid.b, cells: f.grid.cells.map(c=>cut(move(c)))} : null, source: f.source, backup: f.backup};
+}
+
+async function refresh(force){
   if(state.loading){ state.pending = true; return; }
   state.pending = false;
   if(!state.sites.length){ state.loading=false; state.error=null; state.times=[]; renderAll(); return; }
   state.loading = true; state.error = null;
   $('refreshBtn').disabled = true; $('refreshBtn').textContent = 'Refreshing…';
   try{
-    const b = gridBounds();
-    const gridPts = [];
-    for(let r=0;r<GRID_N;r++) for(let c=0;c<GRID_N;c++)
-      gridPts.push({lat: b.n - r*(b.n-b.s)/(GRID_N-1), lon: b.w + c*(b.e-b.w)/(GRID_N-1)});
-    const pts = state.sites.map(s=>({lat:s.lat, lon:s.lon})).concat(gridPts);
-    const {arr, label} = await fetchForecast(pts);
-
-    const times = arr[0].hourly.time;
-    const nowKey = nowLocalKey();
-    let start = times.findIndex(t => t >= nowKey); if(start < 0) start = 0;
-    state.times = times.slice(start, start+HOURS);
-    const N = state.times.length;
-    const slice = h => {
-      const t = h.temperature_2m.slice(start,start+N), rh = h.relative_humidity_2m.slice(start,start+N), ws = (h.wind_speed_10m||[]).slice(start,start+N);
-      const p = (h.precipitation||[]).slice(start,start+N), pp = (h.precipitation_probability||[]).slice(start,start+N);
-      return {t, rh, ws, p, pp, fl: t.map((v,i)=>feelsLike(v, rh[i], ws[i]))};
-    };
-    state.siteData = state.sites.map((s,i)=>slice(arr[i].hourly));
-    state.grid = {n:GRID_N, b, cells: arr.slice(state.sites.length).map(l=>slice(l.hourly))};
-    state.source = label;
-    state.updated = new Date();
+    const site = state.sites[0], cached = readCache(site);
+    let f, savedAt, stale = false;
+    if(force !== true && cached && Date.now() - cached.savedAt < CACHE_FRESH_MIN*60e3){ f = cached.f; savedAt = cached.savedAt; }
+    else {
+      try{ f = await loadForecast(site); savedAt = Date.now(); saveCache(site, f); }
+      catch(e){
+        if(cached && Date.now() - cached.savedAt < CACHE_MAX_HOURS*3600e3){ f = cached.f; savedAt = cached.savedAt; stale = true; }
+        else throw e;
+      }
+    }
+    const a = alignTo(f, hourKeys(HOURS));
+    if(a.keys.length < 6) throw Object.assign(new Error('no current forecast'), {kind:'http'});
+    state.times = a.keys; state.siteData = [a.site]; state.grid = a.grid;
+    state.source = a.source; state.backup = a.backup; state.stale = stale;
+    state.updated = new Date(savedAt);
     state.frame = 0;
     if(!state.selected || !state.sites.some(s=>s.id===state.selected)) state.selected = state.sites[0].id;
     overlayCache.clear();
@@ -884,12 +986,10 @@ function renderBoard(){
   edge.className = 'board-edge';
   if(state.error){
     const k = state.error.kind;
-    hl.textContent = k==='network' ? 'Open this page in your web browser' : 'The forecast didn’t load';
+    hl.textContent = 'The forecast didn’t load';
     sub.textContent = k==='network'
-      ? 'The page can’t reach the weather service from here. If you opened it inside the Claude app, save the file and open it in Chrome, Edge or Safari instead. Otherwise check your internet connection and select Refresh forecast.'
-      : k==='forbidden'
-      ? 'The weather service refused the request (error 403). This usually means a work network or browser preview is blocking it. Open the file directly in Chrome, Edge or Safari, or try another network.'
-      : 'The weather service returned an error: ' + (state.error.message||state.error) + '. Select Refresh forecast to try again.';
+      ? 'Neither forecast service could be reached. Check the internet connection, then select Refresh forecast. If you opened a saved copy inside the Claude app, use the website link instead.'
+      : 'Both forecast services returned an error (' + (state.error.message||state.error) + '). Select Refresh forecast to try again in a few minutes.';
     meta.textContent = ''; return;
   }
   if(!state.sites.length){ hl.textContent='Enter your site address'; sub.textContent='Search for a street address or suburb, or pick the spot on the map.'; meta.textContent=''; return; }
@@ -906,7 +1006,13 @@ function renderBoard(){
     sub.textContent = `Peak ${r0(w.maxT)}°C air, feels like ${r0(w.maxFl)}°C. ${state.events.length} trigger period${state.events.length===1?'':'s'} and ${mm(sumP(state.siteData[0].p))} mm of rain in the next 72 hours; see the tables below.`;
   }
   const t = state.updated ? state.updated.toLocaleTimeString('en-AU',{timeZone:TZ,hour:'numeric',minute:'2-digit'}) : '';
-  meta.textContent = `Forecast from the ${state.source}. Updated ${t} Brisbane time.`;
+  const day = state.updated ? state.updated.toLocaleDateString('en-AU',{timeZone:TZ,weekday:'short',day:'numeric',month:'short'}) : '';
+  if(state.stale){
+    sub.textContent = `Live forecast services can’t be reached, so this is the forecast saved at ${t} ${day}. ` + sub.textContent;
+    meta.textContent = `Saved forecast from ${state.source}, ${t} ${day} Brisbane time. It updates automatically when a service is back.`;
+  } else {
+    meta.textContent = `Forecast from ${state.source}${state.backup ? ' (backup service)' : ''}. Updated ${t} Brisbane time.`;
+  }
 }
 
 /* ---------- Chart ---------- */
@@ -1052,7 +1158,7 @@ let refetchT = null;
 function scheduleRefetch(){ clearTimeout(refetchT); refetchT = setTimeout(refresh, 400); }
 
 function bind(){
-  $('refreshBtn').addEventListener('click', refresh);
+  $('refreshBtn').addEventListener('click', ()=>refresh(true));
   $('copyBtn').addEventListener('click', copyAlert);
   $('playBtn').addEventListener('click', ()=> setPlaying(!playTimer));
   $('speedSel').addEventListener('change', ()=>{ if(playTimer) setPlaying(true); });
@@ -1129,7 +1235,7 @@ setPlaying(false);
 renderAll();
 fitMap();
 refresh();
-setInterval(refresh, 60*60*1000);
+setInterval(()=>refresh(), 60*60*1000);
 })();
 </script>
 </body>
